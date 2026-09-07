@@ -28,37 +28,61 @@ import subprocess
 import xml.etree.ElementTree as ET
 
 CONFIG_FILE = os.path.expanduser("~/.merak_bridge_config.json")
+TRIGGER_FILE = os.path.expanduser("~/.bridge_trigger")
 
 def load_saved_server():
+    default_url = "https://triomerak.web.id"
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                return json.load(f).get("server_url", "https://triomerak.web.id")
+                url = json.load(f).get("server_url", default_url)
+                if "triomerak.web.id" in url:
+                    url = "https://triomerak.web.id"
+                if not url.startswith("http"):
+                    url = "https://" + url
+                return url
         except Exception:
             pass
-    return "https://triomerak.web.id"
+    return default_url
 
 def save_server(url):
     try:
+        if "triomerak.web.id" in url:
+            url = "https://triomerak.web.id"
+        if not url.startswith("http"):
+            url = "https://" + url
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump({"server_url": url.rstrip("/")}, f)
     except Exception:
         pass
 
+_CACHED_RISH = None
+
 def get_rish_cmd():
+    global _CACHED_RISH
+    env = os.environ.copy()
+    env["RISH_APPLICATION_ID"] = "com.termux"
+
+    if _CACHED_RISH:
+        try:
+            cmd = (_CACHED_RISH + ["-c", "id"]) if _CACHED_RISH[0] != "su" else ["su", "-c", "id"]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=5, env=env)
+            if "uid=" in (res.stdout or ""):
+                return _CACHED_RISH
+        except Exception:
+            _CACHED_RISH = None
+
     candidates = [
-        ["sh", "/data/data/com.termux/files/usr/bin/rish"],
         ["/data/data/com.termux/files/usr/bin/rish"],
-        ["sh", "rish"],
         ["rish"],
         ["su", "-c"]
     ]
-    env = os.environ.copy()
-    env["RISH_APPLICATION_ID"] = "com.termux"
     for c in candidates:
         try:
-            res = subprocess.run(c + (["id"] if c[0] == "su" else ["-c", "id"]), capture_output=True, text=True, timeout=4, env=env)
+            cmd = (c + ["-c", "id"]) if c[0] != "su" else ["su", "-c", "id"]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=8, env=env)
             if "uid=" in (res.stdout or ""):
+                _CACHED_RISH = c
                 return c
         except Exception:
             pass
@@ -81,13 +105,19 @@ def exec_shizuku_cmd(cmd_str, timeout=15):
         return ""
 
 def dump_ui_xml():
-    exec_shizuku_cmd("uiautomator dump /sdcard/dump.xml")
-    xml_data = exec_shizuku_cmd("cat /sdcard/dump.xml")
+    # Gunakan /data/local/tmp/dump.xml agar bebas dari pembatasan Android Scoped Storage
+    exec_shizuku_cmd("uiautomator dump /data/local/tmp/dump.xml")
+    xml_data = exec_shizuku_cmd("cat /data/local/tmp/dump.xml")
+    if not xml_data or "<hierarchy" not in xml_data:
+        # Fallback ke /sdcard/dump.xml jika /data/local/tmp tidak dapat dibaca
+        exec_shizuku_cmd("uiautomator dump /sdcard/dump.xml")
+        xml_data = exec_shizuku_cmd("cat /sdcard/dump.xml")
     return xml_data
 
 def parse_seed_phrase_from_xml(xml_text):
     if not xml_text or "<hierarchy" not in xml_text:
         return []
+
     try:
         root = ET.fromstring(xml_text)
     except Exception:
@@ -179,6 +209,7 @@ def do_extract(server_url, with_timer=False, trigger_source=""):
 
     with _extract_lock:
         if _is_extracting:
+            print("[!] Sedang proses ekstraksi sebelumnya, abaikan trigger ganda.", flush=True)
             return
         _is_extracting = True
 
@@ -193,7 +224,7 @@ def do_extract(server_url, with_timer=False, trigger_source=""):
                 time.sleep(1)
             print("🚀 [MEMBACA LAYAR HP SEKARANG]...", flush=True)
         else:
-            print(f"\n🚀 [PERINTAH DARI WEB POS] Mengekstrak layar instan (Tanpa timer)...", flush=True)
+            print(f"\n🚀 [PERINTAH DARI WEB POS: {trigger_source}] Mengekstrak layar instan (Tanpa timer)...", flush=True)
 
         xml_data = dump_ui_xml()
         words = parse_seed_phrase_from_xml(xml_data)
@@ -228,39 +259,79 @@ def do_extract(server_url, with_timer=False, trigger_source=""):
             _is_extracting = False
 
 # ==============================================================================
-# BACKGROUND LISTENERS: VOLUME KEYS, STDIN ENTER, & WEB POLL
+# BACKGROUND LISTENERS: VOLUME KEYS, FILE TRIGGER (ENTER), & WEB POLL
 # ==============================================================================
 def listen_volume_keys(server_url):
     """Mendengarkan event tombol fisik Volume Up & Volume Down di HP via getevent."""
-    rish = get_rish_cmd()
-    if not rish:
-        return
     env = os.environ.copy()
     env["RISH_APPLICATION_ID"] = "com.termux"
-    cmd = (rish + ["-c", "getevent -l"]) if rish[0] != "su" else ["su", "-c", "getevent -l"]
 
-    try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            bufsize=1,
-            env=env
-        )
-        for line in iter(proc.stdout.readline, ''):
-            if not line:
-                break
-            line_up = line.upper()
-            if "KEY_VOLUMEUP" in line_up or "KEY_VOLUMEDOWN" in line_up or " 0072 " in line or " 0073 " in line:
-                if "DOWN" in line_up or " 00000001" in line:
-                    btn_name = "VOLUME ATAS" if ("UP" in line_up or " 0073 " in line) else "VOLUME BAWAH"
-                    threading.Thread(target=do_extract, args=(server_url, True, btn_name), daemon=True).start()
-    except Exception:
-        pass
+    while True:
+        rish = get_rish_cmd()
+        if not rish:
+            time.sleep(3)
+            continue
+
+        cmd = (rish + ["-c", "getevent -l"]) if rish[0] != "su" else ["su", "-c", "getevent -l"]
+
+        try:
+            # Gunakan PTY jika tersedia di Termux agar getevent tidak menahan output dalam buffer C 4KB
+            try:
+                import pty
+                master, slave = pty.openpty()
+                proc = subprocess.Popen(
+                    cmd,
+                    stdin=slave,
+                    stdout=slave,
+                    stderr=slave,
+                    env=env,
+                    close_fds=True
+                )
+                os.close(slave)
+                out_stream = open(master, "r", encoding="utf-8", errors="ignore")
+            except Exception:
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    bufsize=1,
+                    env=env
+                )
+                out_stream = proc.stdout
+
+            print("🎧 Listener tombol fisik Volume HP aktif & siap!", flush=True)
+
+            for line in out_stream:
+                if not line:
+                    break
+                line_up = line.upper()
+                if "KEY_VOLUMEUP" in line_up or "KEY_VOLUMEDOWN" in line_up or " 0072 " in line or " 0073 " in line:
+                    if "DOWN" in line_up or " 00000001" in line:
+                        btn_name = "VOLUME ATAS" if ("UP" in line_up or " 0073 " in line) else "VOLUME BAWAH"
+                        print(f"\n👉 [TOMBOL FISIK HP TERDETEKSI: {btn_name}]", flush=True)
+                        threading.Thread(target=do_extract, args=(server_url, True, btn_name), daemon=True).start()
+
+        except Exception:
+            time.sleep(2)
+
+def listen_file_trigger(server_url):
+    """Mendengarkan trigger file ~/.bridge_trigger (dipicu saat tombol ENTER ditekan di Termux)."""
+    while True:
+        try:
+            if os.path.exists(TRIGGER_FILE):
+                try:
+                    os.remove(TRIGGER_FILE)
+                except Exception:
+                    pass
+                print("\n👉 [TOMBOL ENTER TERMUX TERDETEKSI]", flush=True)
+                threading.Thread(target=do_extract, args=(server_url, True, "ENTER TERMUX"), daemon=True).start()
+        except Exception:
+            pass
+        time.sleep(0.4)
 
 def listen_stdin_enter(server_url):
-    """Mendengarkan penekanan tombol ENTER di terminal Termux jika dijalankan secara interaktif."""
+    """Mendengarkan penekanan tombol ENTER di terminal jika berjalan di foreground."""
     while True:
         try:
             line = sys.stdin.readline()
@@ -276,15 +347,18 @@ def listen_web_poll(server_url):
     poll_endpoint = server_url.rstrip("/") + "/api/bridge/poll"
     while True:
         try:
-            req = urllib.request.Request(poll_endpoint, headers={"User-Agent": "TrioMerakBridge/1.0"})
+            req = urllib.request.Request(
+                poll_endpoint,
+                headers={"User-Agent": "TrioMerakBridge/1.0"}
+            )
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 cmd = data.get("command")
                 if cmd in ("EXTRACT_PHRASE", "DETECT_ADDRESS"):
-                    threading.Thread(target=do_extract, args=(server_url, False, "KLIK WEB POS"), daemon=True).start()
+                    threading.Thread(target=do_extract, args=(server_url, False, f"KLIK WEB POS ({cmd})"), daemon=True).start()
         except Exception:
             pass
-        time.sleep(2)
+        time.sleep(1)
 
 def main():
     server_url = load_saved_server()
@@ -296,6 +370,15 @@ def main():
                 server_url = "https://" + server_url
             save_server(server_url)
 
+    if "--trigger" in sys.argv or "--extract" in sys.argv:
+        try:
+            with open(TRIGGER_FILE, "w") as f:
+                f.write("1")
+            print("✅ Trigger ekstraksi berhasil dikirim ke background bridge!")
+        except Exception as e:
+            print(f"❌ Gagal mengirim trigger: {e}")
+        return
+
     rish = get_rish_cmd()
 
     print("=" * 60, flush=True)
@@ -305,37 +388,40 @@ def main():
         print(f"✅ Akses Shizuku / Root Aktif : {' '.join(rish)}", flush=True)
     else:
         print("⚠️ Akses rish / Shizuku belum aktif di Termux!", flush=True)
-        print("   Jalankan: cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish $PREFIX/bin/rish && chmod +x $PREFIX/bin/rish", flush=True)
+        print("   💡 Panduan Cepat:", flush=True)
+        print("   1. Buka aplikasi Shizuku di HP -> Pastikan 'Shizuku is running'", flush=True)
+        print("   2. Buka menu 'Authorized applications' (Aplikasi yang diizinkan) -> Centang Termux", flush=True)
+        print("   3. Jalankan perintah di Termux:", flush=True)
+        print("      cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish* $PREFIX/bin/ && chmod +x $PREFIX/bin/rish", flush=True)
     print(f"🌐 Server Target Web Gateway : {server_url}", flush=True)
     print("=" * 60, flush=True)
     print("⚡ SHORTCUT EKSTRAKSI CEPAT:", flush=True)
     print("  👉 Tekan Tombol [VOLUME ATAS / BAWAH] di HP (Timer 3s)", flush=True)
     print("  👉 Tekan [ENTER] di Termux (Timer 3s)", flush=True)
-    print("  👉 Klik [Ambil Phrase] di Web POS Kasir (Tanpa Timer)", flush=True)
+    print("  👉 Klik [Ambil Phrase] di Web POS Kasir (Instan)", flush=True)
     print("  👉 Tekan Ctrl + C untuk keluar dari log", flush=True)
     print("=" * 60, flush=True)
     print("🟢 Bridge aktif & standby 24/7 di background (PM2)...\n", flush=True)
 
     # Jalankan listener di thread terpisah
-    t_vol = threading.Thread(target=listen_volume_keys, args=(server_url,), daemon=True)
-    t_vol.start()
+    threading.Thread(target=listen_volume_keys, args=(server_url,), daemon=True).start()
+    threading.Thread(target=listen_web_poll, args=(server_url,), daemon=True).start()
+    threading.Thread(target=listen_file_trigger, args=(server_url,), daemon=True).start()
 
-    t_web = threading.Thread(target=listen_web_poll, args=(server_url,), daemon=True)
-    t_web.start()
-
-    # Jika berjalan di bawah PM2 / background daemon (stdin bukan TTY), jaga proses tetap hidup
-    if not sys.stdin or not sys.stdin.isatty():
-        try:
-            while True:
-                time.sleep(2)
-        except KeyboardInterrupt:
-            pass
-    else:
-        # Jika dijalankan interaktif di foreground
+    # Jika berjalan di foreground dengan TTY, pasang juga listener stdin
+    if sys.stdin and sys.stdin.isatty():
         try:
             listen_stdin_enter(server_url)
         except KeyboardInterrupt:
             print("\n\n[*] Bridge dihentikan oleh pengguna. Sampai jumpa!")
+            return
+
+    # Loop utama background process
+    try:
+        while True:
+            time.sleep(2)
+    except KeyboardInterrupt:
+        pass
 
 if __name__ == "__main__":
     main()
