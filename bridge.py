@@ -4,16 +4,16 @@
 ==================================================================
         TRIO MERAK - SHIZUKU BRIDGE FOR TERMUX (ANDROID)
 ==================================================================
-Otomatisasi Shizuku (rish) di HP Android untuk:
+Jembatan otomatisasi Shizuku (rish) di HP Android untuk:
 1. Mengekstrak 12/24 kata Seed Phrase dari layar Bitget Wallet.
 2. Mendeteksi Alamat Barcode Penerima (0x...) dari layar Bitget Wallet.
 3. Mengirimkan hasil ke Web Server Gateway secara aman lewat internet seluler.
 
-Fitur Shortcut:
-- Tombol [ENTER] di terminal Termux (Timer 3 detik).
+Fitur Otomatisasi:
 - Tombol Fisik [VOLUME ATAS] / [VOLUME BAWAH] di HP (Timer 3 detik).
-- Eksekusi instan dari tombol Web POS Kasir (Tanpa timer).
-- Tekan Ctrl + C untuk keluar kapan saja.
+- Tombol [ENTER] di terminal Termux (Timer 3 detik).
+- Eksekusi Instan dari tombol Web POS Kasir (Tanpa timer / 0 detik).
+- Berjalan 24/7 di latar belakang via PM2 Process Manager.
 """
 
 import os
@@ -260,15 +260,16 @@ def listen_volume_keys(server_url):
         pass
 
 def listen_stdin_enter(server_url):
-    """Mendengarkan penekanan tombol ENTER di terminal Termux."""
+    """Mendengarkan penekanan tombol ENTER di terminal Termux jika dijalankan secara interaktif."""
     while True:
         try:
             line = sys.stdin.readline()
-            if line is None:
-                break
+            if not line:
+                time.sleep(1)
+                continue
             threading.Thread(target=do_extract, args=(server_url, True, "TOMBOL ENTER"), daemon=True).start()
         except Exception:
-            break
+            time.sleep(1)
 
 def listen_web_poll(server_url):
     """Mendengarkan klik tombol dari halaman Web POS Kasir (Tanpa Timer)."""
@@ -297,23 +298,23 @@ def main():
 
     rish = get_rish_cmd()
 
-    print("=" * 60)
-    print("   TRIO MERAK - SHIZUKU BRIDGE RUNNER FOR TERMUX")
-    print("=" * 60)
+    print("=" * 60, flush=True)
+    print("   TRIO MERAK - SHIZUKU BRIDGE RUNNER FOR TERMUX", flush=True)
+    print("=" * 60, flush=True)
     if rish:
-        print(f"✅ Akses Shizuku / Root Aktif : {' '.join(rish)}")
+        print(f"✅ Akses Shizuku / Root Aktif : {' '.join(rish)}", flush=True)
     else:
-        print("⚠️ Akses rish / Shizuku belum aktif di Termux!")
-        print("   Jalankan: cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish $PREFIX/bin/rish && chmod +x $PREFIX/bin/rish")
-    print(f"🌐 Server Target Web Gateway : {server_url}")
-    print("=" * 60)
-    print("⚡ SHORTCUT EKSTRAKSI CEPAT:")
-    print("  👉 Tekan [ENTER] di Termux (Timer 3s)")
-    print("  👉 Tekan Tombol [VOLUME ATAS / BAWAH] di HP (Timer 3s)")
-    print("  👉 Atau Klik [Ambil Phrase] di Web POS (Tanpa Timer)")
-    print("  👉 Tekan Ctrl + C untuk keluar kapan saja")
-    print("=" * 60)
-    print("🟢 Bridge aktif & standby menunggu perintah...\n", flush=True)
+        print("⚠️ Akses rish / Shizuku belum aktif di Termux!", flush=True)
+        print("   Jalankan: cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish $PREFIX/bin/rish && chmod +x $PREFIX/bin/rish", flush=True)
+    print(f"🌐 Server Target Web Gateway : {server_url}", flush=True)
+    print("=" * 60, flush=True)
+    print("⚡ SHORTCUT EKSTRAKSI CEPAT:", flush=True)
+    print("  👉 Tekan Tombol [VOLUME ATAS / BAWAH] di HP (Timer 3s)", flush=True)
+    print("  👉 Tekan [ENTER] di Termux (Timer 3s)", flush=True)
+    print("  👉 Klik [Ambil Phrase] di Web POS Kasir (Tanpa Timer)", flush=True)
+    print("  👉 Tekan Ctrl + C untuk keluar dari log", flush=True)
+    print("=" * 60, flush=True)
+    print("🟢 Bridge aktif & standby 24/7 di background (PM2)...\n", flush=True)
 
     # Jalankan listener di thread terpisah
     t_vol = threading.Thread(target=listen_volume_keys, args=(server_url,), daemon=True)
@@ -322,11 +323,19 @@ def main():
     t_web = threading.Thread(target=listen_web_poll, args=(server_url,), daemon=True)
     t_web.start()
 
-    # Thread utama mendengarkan Enter
-    try:
-        listen_stdin_enter(server_url)
-    except KeyboardInterrupt:
-        print("\n\n[*] Bridge dihentikan oleh pengguna. Sampai jumpa!")
+    # Jika berjalan di bawah PM2 / background daemon (stdin bukan TTY), jaga proses tetap hidup
+    if not sys.stdin or not sys.stdin.isatty():
+        try:
+            while True:
+                time.sleep(2)
+        except KeyboardInterrupt:
+            pass
+    else:
+        # Jika dijalankan interaktif di foreground
+        try:
+            listen_stdin_enter(server_url)
+        except KeyboardInterrupt:
+            print("\n\n[*] Bridge dihentikan oleh pengguna. Sampai jumpa!")
 
 if __name__ == "__main__":
     main()
