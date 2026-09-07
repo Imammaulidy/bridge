@@ -13,7 +13,10 @@ Pilih **[1] ALL-IN-ONE** dari menu → Bridge otomatis install dependensi & runn
 
 ### Update
 ```bash
-cd ~/bridge && git pull origin main && pm2 restart bridge
+cd ~/bridge && git pull origin main
+pm2 delete bridge
+pm2 start ~/bridge.py --name bridge --interpreter python3 --env RISH_APPLICATION_ID=com.termux
+pm2 save
 ```
 
 ### Reset Clean Install
@@ -43,10 +46,22 @@ XML dump tersimpan di `~/last_dump.xml`
 2. **Shizuku** - Install dari [GitHub](https://github.com/RikkaApps/Shizuku/releases)
    - Start Shizuku
    - Authorized apps → Centang Termux
+3. **Setup rish binary:**
+   ```bash
+   cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish* $PREFIX/bin/
+   chmod +x $PREFIX/bin/rish
+   ```
+4. **Test koneksi:** `rish -c id` (harus tampil `uid=2000`)
 
 ## 🔧 Commands
 
 ```bash
+# Setup PM2 dengan environment variable
+pm2 delete bridge
+pm2 start ~/bridge.py --name bridge --interpreter python3 --env RISH_APPLICATION_ID=com.termux
+pm2 save
+
+# Commands lainnya
 pm2 status              # Cek status
 pm2 logs bridge         # Lihat log
 pm2 restart bridge      # Restart
