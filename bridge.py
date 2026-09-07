@@ -225,7 +225,7 @@ def parse_seed_phrase_from_xml(xml_text, debug=False):
             clean = part.strip().lower()
             # Remove trailing punctuation
             clean = re.sub(r'[.,;:!?\'"]+$', '', clean)
-            if clean.isalpha() and 3 <= len(clean) <= 12 and clean not in ignore:
+            if clean.isalpha() and 2 <= len(clean) <= 15 and clean not in ignore:
                 if clean not in cand:  # Avoid duplicates
                     cand.append(clean)
                     if debug:
