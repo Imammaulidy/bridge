@@ -11,7 +11,7 @@ Jembatan otomatisasi Shizuku (rish) di HP Android untuk:
 
 Fitur Otomatisasi:
 - Tombol Fisik [VOLUME ATAS] / [VOLUME BAWAH] di HP (Timer 3 detik).
-- Tombol [ENTER] di terminal Termux (Timer 3 detik).
+- Tombol [ENTER] di terminal Termux (Timer 4 detik).
 - Eksekusi Instan dari tombol Web POS Kasir (Tanpa timer / 0 detik).
 - Berjalan 24/7 di latar belakang via PM2 Process Manager.
 """
@@ -104,15 +104,35 @@ def exec_shizuku_cmd(cmd_str, timeout=15):
     except Exception:
         return ""
 
+def get_foreground_app():
+    try:
+        out = exec_shizuku_cmd("dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'")
+        if not out:
+            out = exec_shizuku_cmd("dumpsys activity activities | grep -E 'mResumedActivity'")
+        return out.strip()
+    except Exception:
+        return ""
+
 def dump_ui_xml():
-    # Gunakan /data/local/tmp/dump.xml agar bebas dari pembatasan Android Scoped Storage
+    # 1. Coba /data/local/tmp/dump.xml
     exec_shizuku_cmd("uiautomator dump /data/local/tmp/dump.xml")
     xml_data = exec_shizuku_cmd("cat /data/local/tmp/dump.xml")
-    if not xml_data or "<hierarchy" not in xml_data:
-        # Fallback ke /sdcard/dump.xml jika /data/local/tmp tidak dapat dibaca
-        exec_shizuku_cmd("uiautomator dump /sdcard/dump.xml")
-        xml_data = exec_shizuku_cmd("cat /sdcard/dump.xml")
-    return xml_data
+    if xml_data and "<hierarchy" in xml_data:
+        return xml_data
+
+    # 2. Coba default uiautomator dump (/sdcard/window_dump.xml)
+    exec_shizuku_cmd("uiautomator dump")
+    xml_data = exec_shizuku_cmd("cat /sdcard/window_dump.xml")
+    if xml_data and "<hierarchy" in xml_data:
+        return xml_data
+
+    # 3. Coba /sdcard/dump.xml
+    exec_shizuku_cmd("uiautomator dump /sdcard/dump.xml")
+    xml_data = exec_shizuku_cmd("cat /sdcard/dump.xml")
+    if xml_data and "<hierarchy" in xml_data:
+        return xml_data
+
+    return ""
 
 def parse_seed_phrase_from_xml(xml_text):
     if not xml_text or "<hierarchy" not in xml_text:
@@ -129,10 +149,11 @@ def parse_seed_phrase_from_xml(xml_text):
         cd = (node.get('content-desc') or '').strip()
         if t:
             raw_nodes.append(t)
-        elif cd:
+        if cd and cd != t:
             raw_nodes.append(cd)
 
     words = []
+    # Format 1: "1\nword" atau "01. word" dalam satu node
     for item in raw_nodes:
         lines = [x.strip() for x in item.splitlines() if x.strip()]
         if len(lines) == 2 and lines[0].isdigit() and lines[1].isalpha():
@@ -142,20 +163,40 @@ def parse_seed_phrase_from_xml(xml_text):
             if len(parts) == 2 and parts[0].replace('.', '').isdigit() and parts[1].isalpha():
                 words.append(parts[1].lower())
 
-    if len(words) not in (12, 24):
-        ignore = {
-            "cadangkan", "tuliskan", "sembunyikan", "teruskan", "batal",
-            "lanjut", "kembali", "opsi", "setelan", "tentang", "wallet",
-            "phrase", "seed", "backup", "copy", "salin", "lanjutkan",
-            "ok", "done", "next", "confirm", "konfirmasi", "view", "show"
-        }
-        cand = []
-        for item in raw_nodes:
-            clean = item.strip().lower()
+    if len(words) in (12, 24):
+        return words
+
+    # Format 2: Node terpisah bersebelahan: Node 1 bernilai angka "1", Node 2 bernilai kata "apple"
+    adj_words = []
+    i = 0
+    while i < len(raw_nodes) - 1:
+        n1 = raw_nodes[i].strip().replace('.', '')
+        n2 = raw_nodes[i+1].strip().lower()
+        if n1.isdigit() and 1 <= int(n1) <= 24 and n2.isalpha() and 2 <= len(n2) <= 15:
+            adj_words.append(n2)
+            i += 2
+        else:
+            i += 1
+    if len(adj_words) in (12, 24):
+        return adj_words
+
+    # Format 3: Kandidat kata murni (BIP-39 filter)
+    ignore = {
+        "cadangkan", "tuliskan", "sembunyikan", "teruskan", "batal",
+        "lanjut", "kembali", "opsi", "setelan", "tentang", "wallet",
+        "phrase", "seed", "backup", "copy", "salin", "lanjutkan",
+        "ok", "done", "next", "confirm", "konfirmasi", "view", "show",
+        "peringatan", "warning", "mnemonic", "private", "key", "keamanan",
+        "security", "saya", "telah", "menyimpan", "mengerti", "paham", "got"
+    }
+    cand = []
+    for item in raw_nodes:
+        for part in item.split():
+            clean = part.strip().lower()
             if clean.isalpha() and 2 <= len(clean) <= 12 and clean not in ignore:
                 cand.append(clean)
-        if len(cand) in (12, 24):
-            words = cand
+    if len(cand) in (12, 24):
+        return cand
 
     return words
 
@@ -202,8 +243,8 @@ _is_extracting = False
 def do_extract(server_url, with_timer=False, trigger_source=""):
     """
     Eksekusi ekstraksi layar HP.
-    Jika with_timer=True (dipicu dari tombol Termux / Volume HP): delay 3 detik.
-    Jika with_timer=False (dipicu dari tombol Web POS Kasir): TANPA delay.
+    Jika with_timer=True: delay 3-4 detik.
+    Jika with_timer=False: TANPA delay (0s).
     """
     global _is_extracting
 
@@ -214,19 +255,33 @@ def do_extract(server_url, with_timer=False, trigger_source=""):
         _is_extracting = True
 
     try:
+        countdown_secs = 4 if "ENTER" in trigger_source else 3
         if with_timer:
             print("\n" + "=" * 60, flush=True)
             print(f"⚡ [TRIGGER: {trigger_source}]", flush=True)
-            print("⏳ Menghitung mundur 3 detik... Buka layar 12 kata di Bitget!", flush=True)
+            print(f"⏳ Menghitung mundur {countdown_secs} detik... Pastikan layar 12 kata Bitget terbuka!", flush=True)
             print("=" * 60, flush=True)
-            for sec in (3, 2, 1):
+            for sec in range(countdown_secs, 0, -1):
                 print(f"👉 Eksekusi dalam {sec} detik...", flush=True)
                 time.sleep(1)
             print("🚀 [MEMBACA LAYAR HP SEKARANG]...", flush=True)
         else:
             print(f"\n🚀 [PERINTAH DARI WEB POS: {trigger_source}] Mengekstrak layar instan (Tanpa timer)...", flush=True)
 
+        # Cek aplikasi yang sedang di depan layar
+        fg_app = get_foreground_app()
+        if "com.termux" in fg_app:
+            print("⚠️ PERINGATAN: Layar HP saat ini sedang menampilkan aplikasi TERMUX!", flush=True)
+            print("👉 Segera beralih ke aplikasi Bitget Wallet pada halaman 12 kata!", flush=True)
+
         xml_data = dump_ui_xml()
+        xml_len = len(xml_data)
+
+        if not xml_data:
+            print("❌ Gagal membaca dump UI layar HP (0 bytes)!", flush=True)
+            print("   Pastikan service Shizuku di HP aktif dan Termux memiliki izin.", flush=True)
+            return
+
         words = parse_seed_phrase_from_xml(xml_data)
 
         if len(words) in (12, 24):
@@ -244,8 +299,8 @@ def do_extract(server_url, with_timer=False, trigger_source=""):
                 send_to_server(server_url, "address", addr)
                 print("🎉 Alamat penerima berhasil dikirim ke Web POS!", flush=True)
             else:
-                print(f"❌ Tidak ditemukan 12 kata atau alamat barcode di layar.", flush=True)
-                print("   Pastikan layar HP menyala dan membuka halaman 12 kata Seed Phrase Bitget!", flush=True)
+                print(f"❌ Tidak ditemukan 12 kata atau alamat barcode di layar ({xml_len} bytes XML).", flush=True)
+                print("   💡 Catatan: Pastikan aplikasi Bitget Wallet sedang membuka layar 12 kata Seed Phrase (Bukan Termux)!", flush=True)
 
         print("\n" + "─" * 60, flush=True)
         print("✨ SIAP UNTUK AKUN BERIKUTNYA!", flush=True)
@@ -397,7 +452,7 @@ def main():
     print("=" * 60, flush=True)
     print("⚡ SHORTCUT EKSTRAKSI CEPAT:", flush=True)
     print("  👉 Tekan Tombol [VOLUME ATAS / BAWAH] di HP (Timer 3s)", flush=True)
-    print("  👉 Tekan [ENTER] di Termux (Timer 3s)", flush=True)
+    print("  👉 Tekan [ENTER] di Termux (Timer 4s)", flush=True)
     print("  👉 Klik [Ambil Phrase] di Web POS Kasir (Instan)", flush=True)
     print("  👉 Tekan Ctrl + C untuk keluar dari log", flush=True)
     print("=" * 60, flush=True)
