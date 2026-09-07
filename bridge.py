@@ -93,6 +93,8 @@ def get_rish_cmd():
 def exec_shizuku_cmd(cmd_str, timeout=15):
     rish = get_rish_cmd()
     if not rish:
+        if DEBUG_MODE:
+            print("[DEBUG] exec_shizuku_cmd: rish command not found", flush=True)
         return ""
     env = os.environ.copy()
     env["RISH_APPLICATION_ID"] = "com.termux"
@@ -103,7 +105,13 @@ def exec_shizuku_cmd(cmd_str, timeout=15):
             full_cmd = rish + ["-c", cmd_str]
         res = subprocess.run(full_cmd, capture_output=True, text=True, timeout=timeout, env=env)
         return (res.stdout or "").strip()
-    except Exception:
+    except subprocess.TimeoutExpired:
+        if DEBUG_MODE:
+            print(f"[DEBUG] exec_shizuku_cmd timeout: {cmd_str[:50]}...", flush=True)
+        return ""
+    except Exception as e:
+        if DEBUG_MODE:
+            print(f"[DEBUG] exec_shizuku_cmd error: {e}", flush=True)
         return ""
 
 def get_foreground_app():
@@ -116,24 +124,40 @@ def get_foreground_app():
         return ""
 
 def dump_ui_xml():
-    # 1. Coba /data/local/tmp/dump.xml
-    exec_shizuku_cmd("uiautomator dump /data/local/tmp/dump.xml")
-    xml_data = exec_shizuku_cmd("cat /data/local/tmp/dump.xml")
+    """Dump UI XML dengan multiple fallback paths dan error handling."""
+    # 1. Coba /sdcard/dump.xml (paling reliable di banyak device)
+    exec_shizuku_cmd("rm -f /sdcard/dump.xml", timeout=5)
+    result = exec_shizuku_cmd("uiautomator dump /sdcard/dump.xml", timeout=20)
+    if DEBUG_MODE:
+        print(f"[DEBUG] uiautomator dump result: {result[:100] if result else 'empty'}", flush=True)
+    
+    xml_data = exec_shizuku_cmd("cat /sdcard/dump.xml", timeout=10)
     if xml_data and "<hierarchy" in xml_data:
+        if DEBUG_MODE:
+            print(f"[DEBUG] ✅ XML loaded from /sdcard/dump.xml ({len(xml_data)} bytes)", flush=True)
         return xml_data
 
     # 2. Coba default uiautomator dump (/sdcard/window_dump.xml)
-    exec_shizuku_cmd("uiautomator dump")
-    xml_data = exec_shizuku_cmd("cat /sdcard/window_dump.xml")
+    exec_shizuku_cmd("rm -f /sdcard/window_dump.xml", timeout=5)
+    exec_shizuku_cmd("uiautomator dump", timeout=20)
+    xml_data = exec_shizuku_cmd("cat /sdcard/window_dump.xml", timeout=10)
     if xml_data and "<hierarchy" in xml_data:
+        if DEBUG_MODE:
+            print(f"[DEBUG] ✅ XML loaded from /sdcard/window_dump.xml ({len(xml_data)} bytes)", flush=True)
         return xml_data
 
-    # 3. Coba /sdcard/dump.xml
-    exec_shizuku_cmd("uiautomator dump /sdcard/dump.xml")
-    xml_data = exec_shizuku_cmd("cat /sdcard/dump.xml")
+    # 3. Coba /data/local/tmp/dump.xml
+    exec_shizuku_cmd("rm -f /data/local/tmp/dump.xml", timeout=5)
+    exec_shizuku_cmd("uiautomator dump /data/local/tmp/dump.xml", timeout=20)
+    xml_data = exec_shizuku_cmd("cat /data/local/tmp/dump.xml", timeout=10)
     if xml_data and "<hierarchy" in xml_data:
+        if DEBUG_MODE:
+            print(f"[DEBUG] ✅ XML loaded from /data/local/tmp/dump.xml ({len(xml_data)} bytes)", flush=True)
         return xml_data
 
+    if DEBUG_MODE:
+        print("[DEBUG] ❌ Semua fallback path gagal. Periksa permission Shizuku.", flush=True)
+    
     return ""
 
 def parse_seed_phrase_from_xml(xml_text, debug=False):
