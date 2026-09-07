@@ -6,7 +6,7 @@ Secara default **berjalan otomatis 24/7 di latar belakang menggunakan PM2 Proces
 
 ---
 
-## ⚡ 1 Perintah Langsung Jadi (All-in-One via PM2)
+## ⚡ 1 Perintah Langsung Jadi (All-in-One Setup)
 
 Cukup salin dan tempel perintah ini di terminal **Termux** Anda:
 
@@ -15,8 +15,39 @@ pkg update -y && pkg install -y git python && git clone https://github.com/Imamm
 ```
 
 > [!TIP]
-> **Otomatis Penuh**: Perintah `bash run.sh` di atas secara otomatis memeriksa dan memasang Python, Node.js, PM2, menyalin akses Shizuku (`rish`), mengaktifkan `termux-wake-lock`, serta menjalankan bridge di latar belakang via PM2.  
-> Anda bebas menutup Termux atau mematikan layar HP; bridge tetap aktif 24 jam non-stop terhubung ke **`https://triomerak.web.id`**!
+> **Menu Interaktif**: Perintah `bash run.sh` akan membuka **menu interaktif lengkap** dengan 8 pilihan:
+> - **[1] ALL-IN-ONE** → Auto install semua dependensi + jalankan PM2 24/7
+> - **[2] Ubah Target Server** → Ganti URL gateway (default: triomerak.web.id)
+> - **[3] Status PM2** → Cek status bridge
+> - **[4] Log Realtime** → Pantau aktivitas
+> - **[5] Restart Bridge**
+> - **[6] Stop Bridge**
+> - **[7] Trigger Manual Extract**
+> - **[8] Test Koneksi Shizuku**
+
+---
+
+## 🚀 Mode All-in-One (Pilihan Menu #1)
+
+Ketika Anda memilih **[1] ALL-IN-ONE**, sistem otomatis:
+
+✅ **Auto-Install Dependensi**:
+- Python (jika belum ada)
+- Node.js (jika belum ada)
+- PM2 Process Manager (jika belum ada)
+
+✅ **Setup Otomatis**:
+- Konfigurasi storage Termux (`termux-setup-storage`)
+- Salin binary `rish` dari Shizuku
+- Setup environment variable `RISH_APPLICATION_ID`
+- Test koneksi Shizuku
+
+✅ **Launch PM2 24/7**:
+- Aktifkan `termux-wake-lock` (CPU tidak sleep)
+- Jalankan bridge di background via PM2
+- Auto-save PM2 state (restart otomatis setelah reboot HP)
+
+**Setelah selesai, bridge aktif 24/7 dan HP dapat di-minimize atau layar dimatikan!**
 
 ---
 
@@ -29,13 +60,13 @@ pm2 delete bridge 2>/dev/null; cd ~ && rm -rf bridge && git clone https://github
 ```
 
 > [!NOTE]
-> Perintah di atas akan membersihkan seluruh file lama tanpa sisa, mengunduh versi terbaru yang 100% segar dari GitHub, dan langsung mengaktifkan kembali bridge di background PM2 24/7.
+> Perintah di atas akan membersihkan seluruh file lama tanpa sisa, mengunduh versi terbaru yang 100% segar dari GitHub, dan langsung membuka menu interaktif.
 
 ---
 
 ## 🎮 Cara Penggunaan & Shortcut Ekstraksi
 
-Setelah menjalankan `bash run.sh`, sistem sudah aktif di background. Anda memiliki 3 cara praktis untuk mengekstrak:
+Setelah menjalankan via menu **[1] ALL-IN-ONE**, sistem sudah aktif di background. Anda memiliki 3 cara praktis untuk mengekstrak:
 
 ### 1️⃣ Tekan Tombol Fisik [VOLUME ATAS] atau [VOLUME BAWAH] di HP:
 * **Tidak perlu menyentuh terminal Termux sama sekali!**
@@ -45,65 +76,119 @@ Setelah menjalankan `bash run.sh`, sistem sudah aktif di background. Anda memili
 
 ### 2️⃣ Tekan [ENTER] di Termux:
 * Buka Termux, tekan **Enter**.
-* Countdown **3 detik** akan berjalan, lalu mengekstrak layar HP seketika.
+* Countdown **4 detik** akan berjalan, lalu mengekstrak layar HP seketika.
+* Atau gunakan menu **[7] Trigger Manual Extract**
 
 ### 3️⃣ Klik Tombol di Web POS Kasir (Instan 0 Detik):
-* Jika Anda menekan tombol **`⚡ Ambil Phrase dari HP (Shizuku)`** atau **`📱 Dari HP`** di halaman Web POS Kasir, server akan memanggil HP Anda dan mengekstrak layar **langsung tanpa jeda/timer**.
+* Jika Anda menekan tombol **`⚡ Ambil Phrase dari HP`** di halaman Web POS Kasir, server akan memanggil HP Anda dan mengekstrak layar **langsung tanpa jeda/timer**.
 
 ---
 
 ## 📱 Persiapan Awal (Hanya Sekali)
 
-### Berikan Izin Shizuku (`rish`) ke Termux:
-Buka aplikasi **Termux**, lalu jalankan:
+### 1. Install Aplikasi Termux
+Unduh dari **[F-Droid](https://f-droid.org/en/packages/com.termux/)** atau **[GitHub Releases](https://github.com/termux/termux-app/releases)**.  
+⚠️ **Jangan gunakan Termux dari Google Play Store** (versi usang).
 
+### 2. Install & Aktifkan Shizuku
+- Download **Shizuku** dari **[GitHub](https://github.com/RikkaApps/Shizuku/releases)** atau Play Store
+- Buka aplikasi Shizuku
+- Tap tombol **"Start"** (Shizuku is running)
+- Masuk ke menu **"Authorized applications"**
+- Centang **Termux** untuk memberikan izin
+
+### 3. Salin Binary Rish (Otomatis via Menu)
+Menu **[1] ALL-IN-ONE** sudah otomatis menyalin file `rish`.  
+Atau manual:
 ```bash
 termux-setup-storage
-cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish $PREFIX/bin/rish && chmod +x $PREFIX/bin/rish
+cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish* $PREFIX/bin/
+chmod +x $PREFIX/bin/rish
 ```
 
-*(Uji status Shizuku dengan mengetik `rish -c id`. Jika muncul `uid=2000`, Shizuku sudah aktif 100%).*
+### 4. Test Koneksi Shizuku
+Gunakan menu **[8] Test Koneksi Shizuku** atau manual:
+```bash
+rish -c id
+```
+*(Output: `uid=2000` = Shizuku aktif 100%)*
 
 ---
 
-## 📊 Manajemen & Kontrol PM2 via `run.sh`
+## 🎛️ Menu Interaktif Lengkap
 
-Seluruh perintah pengelolaan sudah dicover dalam `run.sh`:
-
-#### 📋 Cek Status Running:
 ```bash
-bash run.sh --status
-```
-*(Atau langsung `pm2 status`)*
-
-#### 📜 Pantau Log Realtime:
-```bash
-bash run.sh --logs
-```
-*(Atau langsung `pm2 logs bridge`. Tekan Ctrl + C untuk keluar dari log tanpa mematikan proses)*
-
-#### 🔄 Restart Bridge:
-```bash
-bash run.sh --restart
+bash run.sh
 ```
 
-#### ⏹️ Hentikan Bridge:
+**Pilihan Menu:**
+
+| No | Menu | Fungsi |
+|----|------|--------|
+| **1** | 🎯 ALL-IN-ONE | Auto setup dependensi + jalankan PM2 24/7 |
+| **2** | 📡 Ubah Target Server | Ganti URL gateway (default: triomerak.web.id) |
+| **3** | 📊 Status & Monitor PM2 | Lihat status bridge (online/offline) |
+| **4** | 📜 Lihat Log Realtime | Streaming log aktivitas bridge |
+| **5** | 🔄 Restart Bridge | Restart proses PM2 |
+| **6** | ⏹️  Stop Bridge | Hentikan proses PM2 |
+| **7** | ⚡ Trigger Manual Extract | Ekstrak layar manual via file trigger |
+| **8** | 🔍 Test Koneksi Shizuku | Verifikasi Shizuku + UIAutomator |
+| **0** | 🚪 Keluar | Exit menu (bridge tetap jalan di background) |
+
+---
+
+## ⚡ Quick Commands (Tanpa Menu)
+
+Selain menu interaktif, Anda juga bisa langsung:
+
 ```bash
-bash run.sh --stop
+bash run.sh --status     # Cek status PM2
+bash run.sh --logs       # Lihat log realtime
+bash run.sh --restart    # Restart bridge
+bash run.sh --stop       # Stop bridge
+bash run.sh --trigger    # Trigger extract manual
+```
+
+Atau langsung via PM2:
+```bash
+pm2 status               # Status bridge
+pm2 logs bridge          # Log realtime (Ctrl+C keluar)
+pm2 restart bridge       # Restart
+pm2 stop bridge          # Stop
 ```
 
 ---
 
-## 🌐 Alamat Web Server Kasir (Default: triomerak.web.id)
+## 🌐 Ubah Target Server Gateway
 
-Sistem bridge **sudah diatur secara default terhubung langsung ke server resmi `https://triomerak.web.id`**, sehingga Anda **tidak perlu mengonfigurasi URL server lagi** untuk pemakaian normal.
+**Default**: Bridge otomatis terhubung ke `https://triomerak.web.id`
 
-Jika Anda ingin mengubah target server ke alamat domain sendiri atau IP lokal, Anda cukup menjalankannya sekali dengan opsi `--server`:
+**Cara Ubah**:
+1. Jalankan menu interaktif: `bash run.sh`
+2. Pilih **[2] Ubah Target Server**
+3. Masukkan URL baru (contoh: `http://192.168.1.100:5000` atau `https://domain-anda.com`)
+4. Restart bridge agar perubahan diterapkan
+
+Server tersimpan permanen di `~/.merak_bridge_config.json`
+
+---
+
+## 🐛 Debug Mode (Verbose Logging)
+
+Untuk troubleshooting detail, aktifkan debug mode:
 
 ```bash
-python bridge.py --server https://triomerak.web.id
+export BRIDGE_DEBUG=1
+pm2 restart bridge
+pm2 logs bridge
 ```
-*(Alamat server yang Anda tentukan akan otomatis tersimpan permanen di HP).*
+
+**Debug mode menampilkan**:
+- Semua text node XML yang terdeteksi
+- Format parsing yang digunakan (1, 2, 3, atau 4)
+- Kata-kata kandidat sebelum filtering
+- Statistik per tahap parsing
+- XML dump tersimpan di `~/last_dump.xml`
 
 ---
 
@@ -118,13 +203,74 @@ python bridge.py --server https://triomerak.web.id
 
 ---
 
-## 📁 Struktur Repositori Bersih (Pure Engine)
+## 🔧 Troubleshooting
+
+### ❌ "Tidak ditemukan 12 kata di layar"
+**Solusi**:
+1. Pastikan aplikasi **Bitget Wallet** terbuka (bukan Termux)
+2. Navigasi ke: **Menu → Settings → Security → Backup Wallet**
+3. Verifikasi PIN/Password untuk melihat 12 kata
+4. Pastikan **semua 12 kata terlihat** di layar (scroll jika perlu)
+5. Jangan ada dialog/popup yang menutupi kata-kata
+
+### ❌ "Shizuku belum aktif"
+**Solusi**:
+1. Buka aplikasi **Shizuku** → Pastikan status **"Shizuku is running"** (hijau)
+2. Menu **"Authorized applications"** → Centang **Termux**
+3. Copy binary: `cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish* $PREFIX/bin/`
+4. Test: `rish -c id` (harus muncul `uid=2000`)
+
+### ❌ "Bridge tidak jalan setelah restart HP"
+**Solusi**:
+```bash
+pm2 resurrect    # Restore state terakhir
+pm2 startup      # Enable auto-start
+pm2 save         # Save current state
+```
+
+### 🔍 Inspect XML Dump (Advanced)
+Jika ekstraksi terus gagal, periksa XML langsung:
+1. Klik **"🔍 Lihat Raw XML Debug"** di Web POS (setelah gagal extract)
+2. Atau manual: `cat ~/last_dump.xml` di Termux
+3. Cari kata-kata seed phrase di XML untuk debugging
+
+---
+
+## 📁 Struktur Repositori Bersih
 
 ```text
 bridge/
-├── bridge.py            # 🐍 Script Bridge Client Shizuku
+├── bridge.py            # 🐍 Script Bridge Client Shizuku (Main Engine)
 ├── ecosystem.config.js  # ⚙️ Konfigurasi PM2 Process Manager
-├── run.sh               # 🚀 All-in-One Runner (Auto-Install, Wake-Lock & PM2 24/7)
+├── run.sh               # 🚀 Interactive Menu + All-in-One Installer
 ├── README.md            # 📖 Dokumentasi Lengkap
 └── .gitignore           # 🔒 Proteksi File Konfigurasi Lokal
 ```
+
+---
+
+## 🆕 Changelog v2.0
+
+**Fitur Baru**:
+- ✅ Menu interaktif 8 pilihan
+- ✅ All-in-one auto installer
+- ✅ Ubah target server via menu
+- ✅ Test koneksi Shizuku built-in
+- ✅ Quick commands (`--status`, `--logs`, dll)
+- ✅ Debug mode verbose (`BRIDGE_DEBUG=1`)
+- ✅ 4 strategi parsing seed phrase
+- ✅ Expanded ignore list (65+ kata UI)
+- ✅ Fallback untuk near-match (10-14 atau 22-26 kata)
+- ✅ XML dump disimpan untuk troubleshooting
+- ✅ Enhanced error messages dengan panduan
+
+---
+
+## 📞 Support & Issues
+
+- **GitHub Issues**: [https://github.com/Imammaulidy/bridge/issues](https://github.com/Imammaulidy/bridge/issues)
+- **Main Gateway**: [https://triomerak.web.id](https://triomerak.web.id)
+
+---
+
+**© 2024 Trio Merak - All Rights Reserved**
