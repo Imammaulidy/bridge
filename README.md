@@ -249,20 +249,31 @@ bridge/
 
 ---
 
-## 🆕 Changelog v2.0
+## 🆕 Changelog v2.1
 
-**Fitur Baru**:
+**Update Terbaru** (Des 2024):
+- ✅ **DEBUG MODE** - `export BRIDGE_DEBUG=1` untuk verbose logging
+- ✅ **XML Auto-Save** - Dump tersimpan di `~/last_dump.xml`
+- ✅ **Enhanced Parser**:
+  - Handle uppercase & mixed case (Apple → apple)
+  - Auto-remove punctuation (wallet, → wallet)
+  - Min word length 3 chars (mengurangi noise)
+  - Avoid duplicate words
+  - Fallback 10-14 atau 22-26 kata
+- ✅ **Better Error Messages**:
+  - Statistik XML size & word count
+  - Deteksi foreground app
+  - Troubleshooting tips spesifik
+  - XML dump location info
+- ✅ **Expanded Filter** - 70+ kata UI Bitget/Android
+
+**Changelog v2.0** (Nov 2024):
 - ✅ Menu interaktif 8 pilihan
 - ✅ All-in-one auto installer
 - ✅ Ubah target server via menu
 - ✅ Test koneksi Shizuku built-in
 - ✅ Quick commands (`--status`, `--logs`, dll)
-- ✅ Debug mode verbose (`BRIDGE_DEBUG=1`)
 - ✅ 4 strategi parsing seed phrase
-- ✅ Expanded ignore list (65+ kata UI)
-- ✅ Fallback untuk near-match (10-14 atau 22-26 kata)
-- ✅ XML dump disimpan untuk troubleshooting
-- ✅ Enhanced error messages dengan panduan
 
 ---
 
