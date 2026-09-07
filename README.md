@@ -2,7 +2,7 @@
 
 Jembatan otomatisasi **Shizuku (`rish`)** di HP Android untuk mengekstrak **12/24 Kata Seed Phrase** dan mendeteksi **Alamat Barcode Penerima (`0x...`)** Bitget Wallet, lalu mengirimkannya secara instan dan aman ke Web Server Gateway lewat **Internet Seluler (Data Mobile)**.
 
-Secara default **berjalan otomatis 24/7 di latar belakang menggunakan PM2 Process Manager**, sehingga Termux dapat di-minimize atau layar HP dimatikan tanpa menghentikan automasi.
+Secara default **berjalan otomatis 24/7 di latar belakang menggunakan PM2 Process Manager**, sehingga Termux dapat di-minimize atau layar HP dimatikan tanpa menghentikan automasi. Terhubung langsung ke website gateway resmi **`https://triomerak.web.id`**.
 
 ---
 
@@ -16,7 +16,20 @@ pkg update -y && pkg install -y git python && git clone https://github.com/Imamm
 
 > [!TIP]
 > **Otomatis Penuh**: Perintah `bash run.sh` di atas secara otomatis memeriksa dan memasang Python, Node.js, PM2, menyalin akses Shizuku (`rish`), mengaktifkan `termux-wake-lock`, serta menjalankan bridge di latar belakang via PM2.  
-> Anda bebas menutup Termux atau mematikan layar HP; bridge tetap aktif 24 jam non-stop!
+> Anda bebas menutup Termux atau mematikan layar HP; bridge tetap aktif 24 jam non-stop terhubung ke **`https://triomerak.web.id`**!
+
+---
+
+## 🔄 Reset & Update Bersih (Jika Git Pull Nyangkut / Error)
+
+Jika update mengalami kendala, file bentrok (*merge conflict*), atau perintah `git pull origin main` nyangkut di Termux, **gunakan 1 baris perintah ini untuk menghentikan proses, menghapus direktori `bridge` lama secara tuntas, dan clone ulang**:
+
+```bash
+pm2 delete bridge 2>/dev/null; cd ~ && rm -rf bridge && git clone https://github.com/Imammaulidy/bridge.git && cd bridge && bash run.sh
+```
+
+> [!NOTE]
+> Perintah di atas akan membersihkan seluruh file lama tanpa sisa, mengunduh versi terbaru yang 100% segar dari GitHub, dan langsung mengaktifkan kembali bridge di background PM2 24/7.
 
 ---
 
@@ -81,14 +94,16 @@ bash run.sh --stop
 
 ---
 
-## 🌐 Mengatur Alamat Web Server Khusus
+## 🌐 Alamat Web Server Kasir (Default: triomerak.web.id)
 
-Jika Anda menggunakan alamat server Web POS sendiri atau IP lokal, jalankan dengan flag `--server`:
+Sistem bridge **sudah diatur secara default terhubung langsung ke server resmi `https://triomerak.web.id`**, sehingga Anda **tidak perlu mengonfigurasi URL server lagi** untuk pemakaian normal.
+
+Jika Anda ingin mengubah target server ke alamat domain sendiri atau IP lokal, Anda cukup menjalankannya sekali dengan opsi `--server`:
 
 ```bash
 python bridge.py --server https://triomerak.web.id
 ```
-*(Pengaturan server akan tersimpan secara otomatis).*
+*(Alamat server yang Anda tentukan akan otomatis tersimpan permanen di HP).*
 
 ---
 
