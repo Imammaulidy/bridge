@@ -131,7 +131,14 @@ def dump_ui_xml():
     if DEBUG_MODE:
         print(f"[DEBUG] uiautomator dump result: {result[:100] if result else 'empty'}", flush=True)
     
-    xml_data = exec_shizuku_cmd("cat /sdcard/dump.xml", timeout=10)
+    time.sleep(0.5)  # Wait for file write to complete
+    
+    # Verify file exists and get size
+    file_check = exec_shizuku_cmd("ls -lh /sdcard/dump.xml 2>/dev/null", timeout=5)
+    if DEBUG_MODE:
+        print(f"[DEBUG] File check: {file_check}", flush=True)
+    
+    xml_data = exec_shizuku_cmd("cat /sdcard/dump.xml 2>/dev/null", timeout=10)
     if xml_data and "<hierarchy" in xml_data:
         if DEBUG_MODE:
             print(f"[DEBUG] ✅ XML loaded from /sdcard/dump.xml ({len(xml_data)} bytes)", flush=True)
@@ -140,23 +147,34 @@ def dump_ui_xml():
     # 2. Coba default uiautomator dump (/sdcard/window_dump.xml)
     exec_shizuku_cmd("rm -f /sdcard/window_dump.xml", timeout=5)
     exec_shizuku_cmd("uiautomator dump", timeout=20)
-    xml_data = exec_shizuku_cmd("cat /sdcard/window_dump.xml", timeout=10)
+    time.sleep(0.5)
+    
+    file_check = exec_shizuku_cmd("ls -lh /sdcard/window_dump.xml 2>/dev/null", timeout=5)
+    if DEBUG_MODE:
+        print(f"[DEBUG] File check window_dump: {file_check}", flush=True)
+    
+    xml_data = exec_shizuku_cmd("cat /sdcard/window_dump.xml 2>/dev/null", timeout=10)
     if xml_data and "<hierarchy" in xml_data:
         if DEBUG_MODE:
             print(f"[DEBUG] ✅ XML loaded from /sdcard/window_dump.xml ({len(xml_data)} bytes)", flush=True)
         return xml_data
 
-    # 3. Coba /data/local/tmp/dump.xml
-    exec_shizuku_cmd("rm -f /data/local/tmp/dump.xml", timeout=5)
-    exec_shizuku_cmd("uiautomator dump /data/local/tmp/dump.xml", timeout=20)
-    xml_data = exec_shizuku_cmd("cat /data/local/tmp/dump.xml", timeout=10)
+    # 3. Coba dengan permission fix
+    exec_shizuku_cmd("uiautomator dump /sdcard/dump.xml", timeout=20)
+    exec_shizuku_cmd("chmod 644 /sdcard/dump.xml", timeout=5)
+    time.sleep(0.5)
+    
+    xml_data = exec_shizuku_cmd("cat /sdcard/dump.xml 2>/dev/null", timeout=10)
     if xml_data and "<hierarchy" in xml_data:
         if DEBUG_MODE:
-            print(f"[DEBUG] ✅ XML loaded from /data/local/tmp/dump.xml ({len(xml_data)} bytes)", flush=True)
+            print(f"[DEBUG] ✅ XML loaded after chmod ({len(xml_data)} bytes)", flush=True)
         return xml_data
 
     if DEBUG_MODE:
-        print("[DEBUG] ❌ Semua fallback path gagal. Periksa permission Shizuku.", flush=True)
+        print("[DEBUG] ❌ Semua fallback path gagal. UIAutomator mungkin tidak support device ini.", flush=True)
+        # Try to read any file content for debugging
+        test_read = exec_shizuku_cmd("head -c 200 /sdcard/dump.xml 2>/dev/null || echo 'cannot read'", timeout=5)
+        print(f"[DEBUG] Test read first 200 bytes: {test_read}", flush=True)
     
     return ""
 
