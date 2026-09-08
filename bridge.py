@@ -71,7 +71,11 @@ def get_rish_cmd():
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=5, env=env)
             if "uid=" in (res.stdout or ""):
                 return _CACHED_RISH
-        except Exception:
+            elif DEBUG_MODE:
+                print(f"[DEBUG] Cached rish validation failed: {res.stdout[:50] if res.stdout else 'no output'}", flush=True)
+        except Exception as e:
+            if DEBUG_MODE:
+                print(f"[DEBUG] Cached rish test error: {e}", flush=True)
             _CACHED_RISH = None
 
     candidates = [
@@ -85,9 +89,17 @@ def get_rish_cmd():
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=8, env=env)
             if "uid=" in (res.stdout or ""):
                 _CACHED_RISH = c
+                if DEBUG_MODE:
+                    print(f"[DEBUG] Rish found and cached: {c}", flush=True)
                 return c
-        except Exception:
-            pass
+            elif DEBUG_MODE:
+                print(f"[DEBUG] Candidate {c} failed: {res.stdout[:30] if res.stdout else 'empty'}", flush=True)
+        except Exception as e:
+            if DEBUG_MODE:
+                print(f"[DEBUG] Candidate {c} exception: {e}", flush=True)
+    
+    if DEBUG_MODE:
+        print("[DEBUG] ❌ No working rish command found!", flush=True)
     return None
 
 def exec_shizuku_cmd(cmd_str, timeout=15):
@@ -97,13 +109,15 @@ def exec_shizuku_cmd(cmd_str, timeout=15):
             print("[DEBUG] exec_shizuku_cmd: rish command not found", flush=True)
         return ""
     env = os.environ.copy()
-    env["RISH_APPLICATION_ID"] = "com.termux"
+    env["RISH_APPLICATION_ID"] = "com.termux"  # Force set environment
     try:
         if rish[0] == "su":
             full_cmd = ["su", "-c", cmd_str]
         else:
             full_cmd = rish + ["-c", cmd_str]
         res = subprocess.run(full_cmd, capture_output=True, text=True, timeout=timeout, env=env)
+        if DEBUG_MODE and res.returncode != 0:
+            print(f"[DEBUG] Command exit code: {res.returncode}, stderr: {res.stderr[:100] if res.stderr else 'none'}", flush=True)
         return (res.stdout or "").strip()
     except subprocess.TimeoutExpired:
         if DEBUG_MODE:
