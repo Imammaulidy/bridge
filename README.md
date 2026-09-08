@@ -13,9 +13,10 @@ Pilih **[1] ALL-IN-ONE** dari menu → Bridge otomatis install dependensi & runn
 
 ### Update
 ```bash
-cd ~/bridge && git pull origin main
+cd ~/bridge
+git pull origin main
 pm2 delete bridge
-pm2 start ~/bridge.py --name bridge --interpreter python3 --env RISH_APPLICATION_ID=com.termux
+pm2 start bridge.py --name bridge --interpreter python3 --env RISH_APPLICATION_ID=com.termux
 pm2 save
 ```
 
@@ -34,6 +35,7 @@ pm2 delete bridge 2>/dev/null; cd ~ && rm -rf bridge && git clone https://github
 
 ```bash
 export BRIDGE_DEBUG=1
+cd ~/bridge
 pm2 restart bridge
 pm2 logs bridge
 ```
@@ -56,9 +58,10 @@ XML dump tersimpan di `~/last_dump.xml`
 ## 🔧 Commands
 
 ```bash
-# Setup PM2 dengan environment variable
+# Setup PM2 dengan environment variable (dari folder bridge)
+cd ~/bridge
 pm2 delete bridge
-pm2 start ~/bridge.py --name bridge --interpreter python3 --env RISH_APPLICATION_ID=com.termux
+pm2 start bridge.py --name bridge --interpreter python3 --env RISH_APPLICATION_ID=com.termux
 pm2 save
 
 # Commands lainnya
