@@ -15,9 +15,7 @@ Pilih **[1] ALL-IN-ONE** dari menu → Bridge otomatis install dependensi & runn
 ```bash
 cd ~/bridge
 git pull origin main
-pm2 delete bridge
-pm2 start bridge.py --name bridge --interpreter python3 --env RISH_APPLICATION_ID=com.termux
-pm2 save
+pm2 reload ecosystem.config.js
 ```
 
 ### Reset Clean Install
@@ -58,16 +56,16 @@ XML dump tersimpan di `~/last_dump.xml`
 ## 🔧 Commands
 
 ```bash
-# Setup PM2 dengan environment variable (dari folder bridge)
+# Start dengan ecosystem config (recommended)
 cd ~/bridge
-pm2 delete bridge
-pm2 start bridge.py --name bridge --interpreter python3 --env RISH_APPLICATION_ID=com.termux
+pm2 start ecosystem.config.js
 pm2 save
 
 # Commands lainnya
 pm2 status              # Cek status
 pm2 logs bridge         # Lihat log
 pm2 restart bridge      # Restart
+pm2 reload ecosystem.config.js  # Reload config
 bash run.sh --status    # Via menu script
 ```
 
