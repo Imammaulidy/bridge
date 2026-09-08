@@ -67,33 +67,34 @@ def get_rish_cmd():
 
     if _CACHED_RISH:
         try:
-            cmd = (_CACHED_RISH + ["-c", "id"]) if _CACHED_RISH[0] != "su" else ["su", "-c", "id"]
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=5, env=env)
-            if "uid=" in (res.stdout or ""):
+            res = subprocess.run(_CACHED_RISH + ["-c", "id"], capture_output=True, text=True, timeout=6, env=env)
+            out = (res.stdout or "") + (res.stderr or "")
+            if "uid=" in out:
                 return _CACHED_RISH
             elif DEBUG_MODE:
-                print(f"[DEBUG] Cached rish validation failed: {res.stdout[:50] if res.stdout else 'no output'}", flush=True)
+                print(f"[DEBUG] Cached rish validation failed: {out[:50]}", flush=True)
         except Exception as e:
             if DEBUG_MODE:
                 print(f"[DEBUG] Cached rish test error: {e}", flush=True)
             _CACHED_RISH = None
 
     candidates = [
+        ["sh", "/data/data/com.termux/files/usr/bin/rish"],
         ["/data/data/com.termux/files/usr/bin/rish"],
-        ["rish"],
-        ["su", "-c"]
+        ["sh", "rish"],
+        ["rish"]
     ]
     for c in candidates:
         try:
-            cmd = (c + ["-c", "id"]) if c[0] != "su" else ["su", "-c", "id"]
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=8, env=env)
-            if "uid=" in (res.stdout or ""):
+            res = subprocess.run(c + ["-c", "id"], capture_output=True, text=True, timeout=8, env=env)
+            out = (res.stdout or "") + (res.stderr or "")
+            if "uid=" in out:
                 _CACHED_RISH = c
                 if DEBUG_MODE:
                     print(f"[DEBUG] Rish found and cached: {c}", flush=True)
                 return c
             elif DEBUG_MODE:
-                print(f"[DEBUG] Candidate {c} failed: {res.stdout[:30] if res.stdout else 'empty'}", flush=True)
+                print(f"[DEBUG] Test {c} -> {out.strip()[:100]}", flush=True)
         except Exception as e:
             if DEBUG_MODE:
                 print(f"[DEBUG] Candidate {c} exception: {e}", flush=True)
@@ -102,7 +103,7 @@ def get_rish_cmd():
         print("[DEBUG] ❌ No working rish command found!", flush=True)
     return None
 
-def exec_shizuku_cmd(cmd_str, timeout=15):
+def exec_shizuku_cmd(cmd_str, timeout=25):
     rish = get_rish_cmd()
     if not rish:
         if DEBUG_MODE:
@@ -111,11 +112,7 @@ def exec_shizuku_cmd(cmd_str, timeout=15):
     env = os.environ.copy()
     env["RISH_APPLICATION_ID"] = "com.termux"  # Force set environment
     try:
-        if rish[0] == "su":
-            full_cmd = ["su", "-c", cmd_str]
-        else:
-            full_cmd = rish + ["-c", cmd_str]
-        res = subprocess.run(full_cmd, capture_output=True, text=True, timeout=timeout, env=env)
+        res = subprocess.run(rish + ["-c", cmd_str], capture_output=True, text=True, timeout=timeout, env=env)
         if DEBUG_MODE and res.returncode != 0:
             print(f"[DEBUG] Command exit code: {res.returncode}, stderr: {res.stderr[:100] if res.stderr else 'none'}", flush=True)
         return (res.stdout or "").strip()
@@ -459,15 +456,13 @@ def listen_volume_keys(server_url):
             time.sleep(3)
             continue
 
-        cmd = (rish + ["-c", "getevent -l"]) if rish[0] != "su" else ["su", "-c", "getevent -l"]
-
         try:
             # Gunakan PTY jika tersedia di Termux agar getevent tidak menahan output dalam buffer C 4KB
             try:
                 import pty
                 master, slave = pty.openpty()
                 proc = subprocess.Popen(
-                    cmd,
+                    rish + ["-c", "getevent -l"],
                     stdin=slave,
                     stdout=slave,
                     stderr=slave,
@@ -478,7 +473,7 @@ def listen_volume_keys(server_url):
                 out_stream = open(master, "r", encoding="utf-8", errors="ignore")
             except Exception:
                 proc = subprocess.Popen(
-                    cmd,
+                    rish + ["-c", "getevent -l"],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL,
                     text=True,

