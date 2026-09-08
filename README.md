@@ -15,12 +15,19 @@ Pilih **[1] ALL-IN-ONE** dari menu → Bridge otomatis install dependensi & runn
 ```bash
 cd ~/bridge
 git pull origin main
-pm2 reload ecosystem.config.js
+pm2 delete bridge
+pm2 start ecosystem.config.js
+pm2 save
 ```
 
 ### Reset Clean Install
 ```bash
-pm2 delete bridge 2>/dev/null; cd ~ && rm -rf bridge && git clone https://github.com/Imammaulidy/bridge.git && cd bridge && bash run.sh
+pm2 delete bridge 2>/dev/null
+cd ~ && rm -rf bridge
+git clone https://github.com/Imammaulidy/bridge.git
+cd bridge
+pm2 start ecosystem.config.js
+pm2 save
 ```
 
 ## ⚡ Cara Ekstrak
@@ -32,8 +39,8 @@ pm2 delete bridge 2>/dev/null; cd ~ && rm -rf bridge && git clone https://github
 ## 🐛 Debug Mode
 
 ```bash
-export BRIDGE_DEBUG=1
 cd ~/bridge
+export BRIDGE_DEBUG=1
 pm2 restart bridge
 pm2 logs bridge
 ```
