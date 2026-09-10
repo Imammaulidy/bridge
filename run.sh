@@ -5,11 +5,31 @@
 
 CONFIG_FILE="$HOME/.merak_bridge_config.json"
 
+detect_backend() {
+    export RISH_APPLICATION_ID="com.termux"
+    if [ -f "$PREFIX/bin/rish" ] && (rish -c id 2>/dev/null | grep -q "uid="); then
+        echo "Shizuku (rish Non-Root)"
+    elif command -v su &>/dev/null && (su -c id 2>/dev/null | grep -q "uid=0"); then
+        echo "Root (su)"
+    elif command -v adb &>/dev/null && (adb devices 2>/dev/null | grep -q "[0-9]\+[[:space:]]\+device"); then
+        echo "Wireless ADB"
+    else
+        echo "Belum Terdeteksi"
+    fi
+}
+
 show_menu() {
     clear
     echo "============================================================"
-    echo "    🚀 TRIO MERAK - SHIZUKU BRIDGE CONTROL MENU"
+    echo "    🚀 TRIO MERAK - SHIZUKU & ADB BRIDGE CONTROL MENU"
     echo "============================================================"
+    echo ""
+    BACKEND_STATUS=$(detect_backend)
+    if [ "$BACKEND_STATUS" != "Belum Terdeteksi" ]; then
+        echo "  🟢 Backend Aktif: $BACKEND_STATUS"
+    else
+        echo "  🟡 Backend Aktif: $BACKEND_STATUS (Perlu Setup Shizuku / ADB)"
+    fi
     echo ""
     echo "  [1] 🎯 ALL-IN-ONE: Auto Setup & Jalankan Bridge (PM2 24/7)"
     echo "  [2] 📡 Ubah Target Server Gateway"
@@ -18,7 +38,8 @@ show_menu() {
     echo "  [5] 🔄 Restart Bridge"
     echo "  [6] ⏹️  Stop Bridge"
     echo "  [7] ⚡ Trigger Manual Extract (ENTER)"
-    echo "  [8] 🔍 Test Koneksi Shizuku"
+    echo "  [8] 🔍 Test Koneksi Shizuku / Root / ADB"
+    echo "  [9] 📶 Mode ADB Wifi (Wireless Debugging Pair & Connect)"
     echo "  [0] 🚪 Keluar"
     echo ""
     echo "============================================================"
@@ -37,18 +58,14 @@ all_in_one_setup() {
     echo "    🚀 ALL-IN-ONE SETUP & LAUNCH"
     echo "============================================================"
     
-    # 1. Install Python
-    if ! command -v python &> /dev/null; then
-        echo "[1/8] Menginstall Python..."
-        pkg update -y && pkg install -y python
-    else
-        echo "[1/8] ✅ Python sudah terinstall"
-    fi
+    # 1. Install Python & Android Tools
+    echo "[1/8] Menginstall Python, Android Tools, dan alat pendukung..."
+    pkg update -y && pkg install -y python android-tools curl unzip
     
     # 2. Install Node.js
     if ! command -v node &> /dev/null; then
         echo "[2/8] Menginstall Node.js..."
-        pkg update -y && pkg install -y nodejs
+        pkg install -y nodejs
     else
         echo "[2/8] ✅ Node.js sudah terinstall"
     fi
@@ -69,43 +86,62 @@ all_in_one_setup() {
         echo "[4/8] ✅ Storage sudah dikonfigurasi"
     fi
     
-    # 5. Copy binary rish dari Shizuku
-    echo "[5/8] Mencari binary rish dari Shizuku..."
+    # 5. Salin atau ekstrak binary rish dari Shizuku
+    echo "[5/8] Memasang binary rish dari Shizuku..."
     RISH_FOUND=0
-    for dir in "/sdcard/Android/data/moe.shizuku.privileged.api/files" "/sdcard/Download" "$HOME/storage/shared/Android/data/moe.shizuku.privileged.api/files" "$HOME/storage/downloads"; do
+    for dir in "/sdcard/Android/data/moe.shizuku.privileged.api/files" "/sdcard/Download" "$HOME/storage/shared/Android/data/moe.shizuku.privileged.api/files" "$HOME/storage/downloads" "/storage/emulated/0/Download"; do
         if [ -f "$dir/rish" ]; then
             cp "$dir/rish"* "$PREFIX/bin/" 2>/dev/null || cp "$dir/rish" "$PREFIX/bin/rish" 2>/dev/null
             [ -f "$dir/rish_shizuku.dex" ] && cp "$dir/rish_shizuku.dex" "$PREFIX/bin/" 2>/dev/null
-            chmod +x "$PREFIX/bin/rish" 2>/dev/null
-            echo "     ✅ Binary rish disalin dari $dir"
             RISH_FOUND=1
+            echo "     ✅ Binary rish disalin dari $dir"
             break
         fi
     done
     
-    if [ $RISH_FOUND -eq 0 ]; then
-        echo "     ⚠️ Binary rish tidak ditemukan. Jalankan manual:"
-        echo "     cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish* \$PREFIX/bin/"
+    # Ekstrak langsung dari APK Shizuku jika belum ada di storage
+    if [ $RISH_FOUND -eq 0 ] && [ ! -f "$PREFIX/bin/rish_shizuku.dex" ]; then
+        APK_PATH=$(pm path moe.shizuku.privileged.api 2>/dev/null | head -n 1 | cut -d: -f2)
+        if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
+            echo "     [*] Mengekstrak rish langsung dari APK Shizuku..."
+            mkdir -p "$PREFIX/tmp/shizuku_extract"
+            unzip -o -q "$APK_PATH" "assets/rish" "assets/rish_shizuku.dex" -d "$PREFIX/tmp/shizuku_extract" 2>/dev/null
+            if [ -f "$PREFIX/tmp/shizuku_extract/assets/rish" ]; then
+                cp "$PREFIX/tmp/shizuku_extract/assets/rish" "$PREFIX/bin/rish"
+                cp "$PREFIX/tmp/shizuku_extract/assets/rish_shizuku.dex" "$PREFIX/bin/rish_shizuku.dex"
+                rm -rf "$PREFIX/tmp/shizuku_extract"
+                RISH_FOUND=1
+                echo "     ✅ Berhasil mengekstrak rish dari APK Shizuku!"
+            fi
+        fi
     fi
-    
-    [ -f "$PREFIX/bin/rish" ] && chmod +x "$PREFIX/bin/rish" 2>/dev/null
+
+    # Patch PKG & Permission read-only untuk Android 14+ / HyperOS
+    if [ -f "$PREFIX/bin/rish" ]; then
+        sed -i 's/"PKG"/"com.termux"/g' "$PREFIX/bin/rish" 2>/dev/null
+        sed -i 's/export RISH_APPLICATION_ID="PKG"/export RISH_APPLICATION_ID="com.termux"/g' "$PREFIX/bin/rish" 2>/dev/null
+        sed -i 's/PKG/com.termux/g' "$PREFIX/bin/rish" 2>/dev/null
+        chmod 755 "$PREFIX/bin/rish" 2>/dev/null
+    fi
+    if [ -f "$PREFIX/bin/rish_shizuku.dex" ]; then
+        chmod 400 "$PREFIX/bin/rish_shizuku.dex" 2>/dev/null || chmod 444 "$PREFIX/bin/rish_shizuku.dex" 2>/dev/null
+    fi
     
     # 6. Setup environment
     echo "[6/8] Setup environment variable..."
     export RISH_APPLICATION_ID="com.termux"
     grep -q "RISH_APPLICATION_ID" ~/.bashrc 2>/dev/null || echo 'export RISH_APPLICATION_ID="com.termux"' >> ~/.bashrc
     
-    # 7. Test Shizuku
-    echo "[7/8] Testing koneksi Shizuku..."
-    RISH_UID=$(rish -c id 2>/dev/null || /data/data/com.termux/files/usr/bin/rish -c id 2>/dev/null)
-    if echo "$RISH_UID" | grep -q "uid="; then
-        echo "     ✅ Shizuku AKTIF! ($RISH_UID)"
-    else
-        echo "     ⚠️ Shizuku belum aktif. Pastikan:"
-        echo "        1. Aplikasi Shizuku berjalan"
-        echo "        2. Termux sudah diizinkan di Shizuku"
+    # 7. Test Backend
+    echo "[7/8] Testing backend eksekusi ADB..."
+    BACKEND_DETECTED=$(detect_backend)
+    echo "     Hasil Deteksi: $BACKEND_DETECTED"
+    if [ "$BACKEND_DETECTED" = "Belum Terdeteksi" ]; then
+        echo "     ⚠️ Backend eksekusi belum aktif. Catatan:"
+        echo "        1. Jika pakai Shizuku: Buka aplikasi Shizuku, izinkan Termux"
+        echo "        2. Jika pakai Wireless Debugging: Gunakan Menu [9] untuk pairing"
         echo ""
-        read -p "     Lanjutkan? (y/n): " confirm
+        read -p "     Tetap lanjutkan jalankan bridge? (y/n): " confirm
         if [ "$confirm" != "y" ]; then
             return
         fi
@@ -243,49 +279,73 @@ trigger_extract() {
 
 test_shizuku() {
     echo "============================================================"
-    echo "    🔍 TEST KONEKSI SHIZUKU"
+    echo "    🔍 TEST KONEKSI ADB / SHIZUKU / ROOT"
     echo "============================================================"
     
     export RISH_APPLICATION_ID="com.termux"
     
-    echo "[*] Testing binary rish..."
-    if [ -f "$PREFIX/bin/rish" ]; then
-        echo "✅ File rish ditemukan di $PREFIX/bin/rish"
+    echo "1. Cek Root (su)..."
+    if command -v su &>/dev/null && su -c id 2>/dev/null | grep -q "uid=0"; then
+        echo "   ✅ ROOT AKTIF: $(su -c id)"
     else
-        echo "❌ File rish tidak ditemukan!"
-        echo "Jalankan: cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish* \$PREFIX/bin/"
-        read -p "Tekan ENTER untuk kembali..."
-        return
+        echo "   ○ Root tidak aktif / non-root"
     fi
-    
+
     echo ""
-    echo "[*] Testing eksekusi perintah via Shizuku..."
-    RISH_UID=$(rish -c id 2>&1)
-    
-    if echo "$RISH_UID" | grep -q "uid="; then
-        echo "✅ Shizuku BERHASIL TERHUBUNG!"
-        echo "   $RISH_UID"
-        echo ""
-        echo "[*] Testing uiautomator dump..."
-        rish -c "uiautomator dump /data/local/tmp/test_dump.xml" 2>&1
-        TEST_RESULT=$(rish -c "cat /data/local/tmp/test_dump.xml 2>/dev/null | head -c 50")
-        if echo "$TEST_RESULT" | grep -q "hierarchy"; then
-            echo "✅ UIAutomator dump BERHASIL!"
+    echo "2. Cek Shizuku (rish)..."
+    if [ -f "$PREFIX/bin/rish" ]; then
+        RISH_UID=$(rish -c id 2>&1)
+        if echo "$RISH_UID" | grep -q "uid="; then
+            echo "   ✅ SHIZUKU AKTIF! ($RISH_UID)"
         else
-            echo "⚠️ UIAutomator dump gagal atau tidak ada data"
+            echo "   ⚠️ rish ditemukan tapi belum diizinkan Shizuku: $RISH_UID"
         fi
     else
-        echo "❌ Shizuku TIDAK TERHUBUNG!"
-        echo "   Error: $RISH_UID"
-        echo ""
-        echo "Checklist:"
-        echo "  1. ✓ Aplikasi Shizuku berjalan di HP?"
-        echo "  2. ✓ Termux sudah diizinkan di Shizuku?"
-        echo "  3. ✓ File rish sudah disalin ke \$PREFIX/bin/?"
+        echo "   ○ File rish belum ada di $PREFIX/bin/rish"
+    fi
+
+    echo ""
+    echo "3. Cek Wireless ADB..."
+    if command -v adb &>/dev/null; then
+        ADB_DEV=$(adb devices 2>/dev/null | grep -E "device$")
+        if [ -n "$ADB_DEV" ]; then
+            echo "   ✅ WIRELESS ADB AKTIF: $ADB_DEV"
+        else
+            echo "   ○ Tidak ada device ADB terhubung"
+        fi
     fi
     
     echo ""
     read -p "Tekan ENTER untuk kembali..."
+}
+
+mode_adb_wifi() {
+    echo "============================================================"
+    echo "    📶 MODE ADB WIFI (WIRELESS DEBUGGING)"
+    echo "============================================================"
+    echo "Panduan:"
+    echo "1. Aktifkan Opsi Pengembang > Wireless Debugging di HP."
+    echo "2. Pilih 'Pair device with pairing code'."
+    echo ""
+    read -p "Masukkan PORT PAIRING (contoh: 38491, kosongkan jika sudah pair): " P_PORT
+    if [ -n "$P_PORT" ]; then
+        echo "Menjalankan: adb pair localhost:$P_PORT"
+        echo "(Masukkan 6 digit kode sandi saat diminta):"
+        adb pair "localhost:$P_PORT"
+    fi
+
+    echo ""
+    read -p "Masukkan PORT CONNECT Wireless Debugging (contoh: 42157): " C_PORT
+    if [ -n "$C_PORT" ]; then
+        echo "Menjalankan: adb connect localhost:$C_PORT"
+        adb connect "localhost:$C_PORT"
+        echo ""
+        echo "Status Perangkat ADB:"
+        adb devices
+    fi
+
+    echo ""
+    read -p "Tekan ENTER untuk kembali ke menu..."
 }
 
 # Handle quick arguments
@@ -316,7 +376,7 @@ esac
 # Main menu loop
 while true; do
     show_menu
-    read -p "Pilih menu [0-8]: " choice
+    read -p "Pilih menu [0-9]: " choice
     
     case $choice in
         1) all_in_one_setup ;;
@@ -327,6 +387,7 @@ while true; do
         6) stop_bridge ;;
         7) trigger_extract ;;
         8) test_shizuku ;;
+        9) mode_adb_wifi ;;
         0) 
             echo "👋 Terima kasih! Bridge tetap berjalan di background (PM2)."
             exit 0

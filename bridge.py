@@ -60,6 +60,31 @@ def save_server(url):
 
 _CACHED_RISH = None
 
+def _has_root():
+    """Kembalikan True jika su tersedia dan dapat dieksekusi (device rooted)."""
+    try:
+        res = subprocess.run(["su", "-c", "id"], capture_output=True, text=True, timeout=5)
+        return res.returncode == 0 and "uid=0" in res.stdout
+    except Exception:
+        return False
+
+def ensure_adb_connected():
+    """Cek koneksi ADB lokal (Wireless Debugging Android 11+)."""
+    try:
+        res = subprocess.run(["adb", "devices"], capture_output=True, text=True, timeout=5)
+        lines = [l for l in (res.stdout or "").strip().splitlines() if "\tdevice" in l]
+        if lines:
+            return lines[0].split()[0]
+        # Coba auto-connect ke localhost:5555
+        subprocess.run(["adb", "connect", "localhost:5555"], capture_output=True, text=True, timeout=5)
+        res2 = subprocess.run(["adb", "devices"], capture_output=True, text=True, timeout=5)
+        lines2 = [l for l in (res2.stdout or "").strip().splitlines() if "\tdevice" in l]
+        if lines2:
+            return lines2[0].split()[0]
+    except Exception:
+        pass
+    return None
+
 def get_rish_cmd():
     global _CACHED_RISH
     env = os.environ.copy()
@@ -103,27 +128,74 @@ def get_rish_cmd():
         print("[DEBUG] ❌ No working rish command found!", flush=True)
     return None
 
-def exec_shizuku_cmd(cmd_str, timeout=25):
+def get_active_backend():
+    """
+    Deteksi backend eksekusi ADB aktif:
+    1. Shizuku (rish) - Non-Root murni
+    2. Root (su) - Rooted Android
+    3. Wireless ADB (adb shell) - Wireless Debugging
+    """
+    # 1. Cek Shizuku
     rish = get_rish_cmd()
-    if not rish:
-        if DEBUG_MODE:
-            print("[DEBUG] exec_shizuku_cmd: rish command not found", flush=True)
-        return ""
+    if rish:
+        return "SHIZUKU", rish
+    # 2. Cek Root
+    if _has_root():
+        return "ROOT", ["su", "-c"]
+    # 3. Cek Wireless ADB
+    adb_dev = ensure_adb_connected()
+    if adb_dev:
+        return "WIRELESS_ADB", ["adb", "shell"]
+    return "NONE", None
+
+def exec_adb_cmd(cmd_str, timeout=30):
+    """
+    Eksekusi perintah Android via backend terbaik yang aktif.
+    Returns: (success: bool, output: str, backend: str, error: str)
+    """
+    backend, runner = get_active_backend()
     env = os.environ.copy()
-    env["RISH_APPLICATION_ID"] = "com.termux"  # Force set environment
-    try:
-        res = subprocess.run(rish + ["-c", cmd_str], capture_output=True, text=True, timeout=timeout, env=env)
-        if DEBUG_MODE and res.returncode != 0:
-            print(f"[DEBUG] Command exit code: {res.returncode}, stderr: {res.stderr[:100] if res.stderr else 'none'}", flush=True)
-        return (res.stdout or "").strip()
-    except subprocess.TimeoutExpired:
-        if DEBUG_MODE:
-            print(f"[DEBUG] exec_shizuku_cmd timeout: {cmd_str[:50]}...", flush=True)
-        return ""
-    except Exception as e:
-        if DEBUG_MODE:
-            print(f"[DEBUG] exec_shizuku_cmd error: {e}", flush=True)
-        return ""
+    env["RISH_APPLICATION_ID"] = "com.termux"
+
+    if backend == "SHIZUKU":
+        try:
+            res = subprocess.run(runner + ["-c", cmd_str], capture_output=True, text=True, timeout=timeout, env=env)
+            out = (res.stdout or "").strip()
+            err = (res.stderr or "").strip()
+            return (res.returncode == 0 or bool(out)), out, "SHIZUKU", err
+        except subprocess.TimeoutExpired:
+            return False, "", "SHIZUKU", f"Timeout {timeout}s"
+        except Exception as e:
+            return False, "", "SHIZUKU", str(e)
+
+    elif backend == "ROOT":
+        try:
+            res = subprocess.run(["su", "-c", cmd_str], capture_output=True, text=True, timeout=timeout)
+            out = (res.stdout or "").strip()
+            err = (res.stderr or "").strip()
+            return (res.returncode == 0 or bool(out)), out, "ROOT", err
+        except subprocess.TimeoutExpired:
+            return False, "", "ROOT", f"Timeout {timeout}s"
+        except Exception as e:
+            return False, "", "ROOT", str(e)
+
+    elif backend == "WIRELESS_ADB":
+        try:
+            res = subprocess.run(["adb", "shell", cmd_str], capture_output=True, text=True, timeout=timeout)
+            out = (res.stdout or "").strip()
+            err = (res.stderr or "").strip()
+            return (res.returncode == 0 or bool(out)), out, "WIRELESS_ADB", err
+        except subprocess.TimeoutExpired:
+            return False, "", "WIRELESS_ADB", f"Timeout {timeout}s"
+        except Exception as e:
+            return False, "", "WIRELESS_ADB", str(e)
+
+    return False, "", "NONE", "Tidak ada backend aktif (Shizuku, Root, atau Wireless ADB belum terhubung)"
+
+def exec_shizuku_cmd(cmd_str, timeout=25):
+    """Fungsi pembungkus kompatibilitas ke exec_adb_cmd."""
+    _, out, _, _ = exec_adb_cmd(cmd_str, timeout=timeout)
+    return out
 
 def get_foreground_app():
     try:
@@ -525,7 +597,7 @@ def listen_stdin_enter(server_url):
             time.sleep(1)
 
 def do_reset_multi_app(server_url):
-    """Eksekusi 5 tahap atomic reset Multi App & Jaringan via Shizuku/rish."""
+    """Eksekusi 5 tahap atomic reset Multi App & Jaringan via Shizuku/Root/Wireless ADB."""
     package_name = "com.waxmoon.ma.gp"
     shell_script = (
         f"am force-stop {package_name}; "
@@ -547,12 +619,23 @@ def do_reset_multi_app(server_url):
     print("\n" + "=" * 60, flush=True)
     print("🚀 [PERINTAH SERVER: RESET MULTI APP & JARINGAN]", flush=True)
     print("=" * 60, flush=True)
-    out = exec_shizuku_cmd(shell_script, timeout=30)
-    print("✅ Rangkaian Reset Multi App Selesai Dieksekusi!", flush=True)
-    send_to_server(server_url, "reset_result", json.dumps({"success": True, "output": out}))
+    success, out, backend, err = exec_adb_cmd(shell_script, timeout=35)
+    if success:
+        print(f"✅ Rangkaian Reset Multi App Selesai Dieksekusi via {backend}!", flush=True)
+    else:
+        print(f"⚠️ Eksekusi selesai dengan catatan via {backend}: {err}", flush=True)
+    
+    # Beri jeda 2 detik agar koneksi data seluler kembali online setelah mode pesawat
+    time.sleep(2)
+    send_to_server(server_url, "reset_result", json.dumps({
+        "success": success or bool(out),
+        "backend": backend,
+        "output": out,
+        "error": err
+    }))
 
 def do_toggle_airplane(server_url):
-    """Toggle mode pesawat ON -> sleep 2 -> OFF via Shizuku."""
+    """Toggle mode pesawat ON -> sleep 2 -> OFF via Shizuku/Root/Wireless ADB."""
     shell_script = (
         "cmd connectivity airplane-mode enable; "
         "settings put global airplane_mode_on 1; "
@@ -565,9 +648,19 @@ def do_toggle_airplane(server_url):
     print("\n" + "=" * 60, flush=True)
     print("✈️ [PERINTAH SERVER: TOGGLE MODE PESAWAT (RESET IP)]", flush=True)
     print("=" * 60, flush=True)
-    out = exec_shizuku_cmd(shell_script, timeout=15)
-    print("✅ Mode Pesawat Berhasil Di-toggle (IP Ter-reset)!", flush=True)
-    send_to_server(server_url, "airplane_result", json.dumps({"success": True, "output": out}))
+    success, out, backend, err = exec_adb_cmd(shell_script, timeout=20)
+    if success:
+        print(f"✅ Mode Pesawat Berhasil Di-toggle via {backend} (IP Ter-reset)!", flush=True)
+    else:
+        print(f"⚠️ Toggle selesai dengan catatan via {backend}: {err}", flush=True)
+    
+    time.sleep(2)
+    send_to_server(server_url, "airplane_result", json.dumps({
+        "success": success or bool(out),
+        "backend": backend,
+        "output": out,
+        "error": err
+    }))
 
 def listen_web_poll(server_url):
     """Mendengarkan instruksi perintah dari Web POS Kasir / Telegram Bot."""
@@ -610,20 +703,23 @@ def main():
             print(f"❌ Gagal mengirim trigger: {e}")
         return
 
-    rish = get_rish_cmd()
+    backend, runner = get_active_backend()
 
     print("=" * 60, flush=True)
-    print("   TRIO MERAK - SHIZUKU BRIDGE RUNNER FOR TERMUX", flush=True)
+    print("   TRIO MERAK - SHIZUKU / ADB BRIDGE RUNNER FOR TERMUX", flush=True)
     print("=" * 60, flush=True)
-    if rish:
-        print(f"✅ Akses Shizuku / Root Aktif : {' '.join(rish)}", flush=True)
+    if backend == "SHIZUKU":
+        print(f"✅ Akses Shizuku (rish) Aktif : {' '.join(runner)}", flush=True)
+    elif backend == "ROOT":
+        print(f"✅ Akses Root (su) Aktif     : {' '.join(runner)}", flush=True)
+    elif backend == "WIRELESS_ADB":
+        print(f"✅ Akses Wireless ADB Aktif  : {' '.join(runner)}", flush=True)
     else:
-        print("⚠️ Akses rish / Shizuku belum aktif di Termux!", flush=True)
+        print("⚠️ Akses Shizuku / Root / Wireless ADB belum terdeteksi!", flush=True)
         print("   💡 Panduan Cepat:", flush=True)
         print("   1. Buka aplikasi Shizuku di HP -> Pastikan 'Shizuku is running'", flush=True)
-        print("   2. Buka menu 'Authorized applications' (Aplikasi yang diizinkan) -> Centang Termux", flush=True)
-        print("   3. Jalankan perintah di Termux:", flush=True)
-        print("      cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish* $PREFIX/bin/ && chmod +x $PREFIX/bin/rish", flush=True)
+        print("   2. Buka menu 'Authorized applications' -> Centang Termux", flush=True)
+        print("   3. Atau gunakan menu [1] di run.sh untuk Wireless Debugging", flush=True)
     print(f"🌐 Server Target Web Gateway : {server_url}", flush=True)
     print("=" * 60, flush=True)
     print("⚡ SHORTCUT EKSTRAKSI CEPAT:", flush=True)
