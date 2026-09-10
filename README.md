@@ -1,68 +1,68 @@
-﻿# 🌉 Trio Merak - Shizuku Bridge for Android
+# 🌉 Trio Merak - Shizuku Bridge for Android (Termux 24/7)
 
-Jembatan otomatisasi Shizuku di HP Android untuk ekstrak seed phrase Bitget Wallet dan kirim ke Web Server Gateway.
-
-## 🚀 Install & Run
-
-```bash
-pkg update -y && pkg install -y git python
-git clone https://github.com/Imammaulidy/bridge.git
-cd bridge
-bash run.sh
-```
-
-Pilih **[1] ALL-IN-ONE** → Bridge otomatis install & running.
-
-## 📋 Prasyarat
-
-1. **Termux** - [F-Droid](https://f-droid.org/packages/com.termux/) (jangan Play Store)
-2. **Shizuku** - [GitHub](https://github.com/RikkaApps/Shizuku/releases)
-   - Start Shizuku → Authorized apps → Centang Termux
-3. **Setup rish:**
-   ```bash
-   cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish* $PREFIX/bin/
-   chmod +x $PREFIX/bin/rish
-   rish -c id  # Test (harus tampil uid=2000)
-   ```
-
-## ⚡ Cara Ekstrak
-
-- **Volume HP** → Timer 3s
-- **Enter Termux** → Timer 4s
-- **Web POS** → Instan
-
-## 🔧 Update & Maintenance
-
-```bash
-# Update dari GitHub
-cd ~/bridge
-git pull origin main
-pm2 delete bridge
-pm2 start ecosystem.config.js
-pm2 save
-
-# Debug mode
-export BRIDGE_DEBUG=1
-pm2 restart bridge
-pm2 logs bridge
-
-# Commands
-pm2 status          # Status
-pm2 logs bridge     # Log realtime
-pm2 restart bridge  # Restart
-bash run.sh         # Menu interaktif
-```
-
-## 🐛 Troubleshooting
-
-**Error "rish command not found":**
-- Pastikan Shizuku running di HP
-- Cek authorized apps → Termux harus dicentang
-- Re-copy rish binary (lihat Setup rish di atas)
-
-**XML dump:** `~/last_dump.xml`
+Jembatan otomatisasi Shizuku (Non-Root) di HP Android untuk:
+1. **Reset Multi App & Jaringan (ADB Atomic Engine)**: Force stop `com.waxmoon.ma.gp`, hapus cache, reset IP data seluler via Mode Pesawat, dan relaunch otomatis (seperti Bot Litensi).
+2. **Ekstraksi Seed Phrase & Barcode Address**: Membaca 12/24 kata dan address `0x...` dari layar Bitget Wallet.
+3. **Komunikasi Dua Arah**: Terhubung ke Server Gateway (`https://triomerak.web.id`) via internet seluler 4G/5G tanpa butuh kabel USB atau Wi-Fi satu jaringan.
 
 ---
 
-**v2.2** - Fixed rish detection (sh wrapper + stdout/stderr check + 25s timeout)  
-**Gateway:** https://triomerak.web.id
+## ⚡ Mode Ekspres (1 Baris Perintah Langsung Jadi):
+
+```bash
+pm2 delete bridge 2>/dev/null; cd ~ && rm -rf bridge && git clone https://github.com/Imammaulidy/bridge.git && cd bridge && bash run.sh
+```
+
+> [!TIP]
+> Perintah di atas akan otomatis mengunduh dependency, menyalin binary Shizuku `rish`, mengaktifkan wake-lock, dan menjalankan bridge 24/7 di latar belakang via PM2.
+
+---
+
+## 📋 Prasyarat di HP Android
+
+1. **Termux**: Unduh versi resmi dari **[F-Droid](https://f-droid.org/en/packages/com.termux/)** atau GitHub Releases (jangan gunakan versi Play Store).
+2. **Shizuku**:
+   - Buka aplikasi Shizuku di HP → Pastikan **Shizuku is running**.
+   - Buka menu **Authorized applications** (Aplikasi yang diizinkan) → Centang **Termux**.
+3. **Setup rish di Termux**:
+   ```bash
+   cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish* $PREFIX/bin/ && chmod +x $PREFIX/bin/rish
+   rish -c id  # Verifikasi (wajib muncul uid=2000(shell))
+   ```
+
+---
+
+## 🎯 Fitur & Kemampuan ADB (Sama Persis Seperti Bot Litensi)
+
+| Perintah | Deskripsi Aksi di HP |
+|---|---|
+| **RESET MULTI APP** | Force-stop `com.waxmoon.ma.gp`, bersihkan cache, toggle mode pesawat ON-OFF (reset IP), dan buka kembali Multi App |
+| **TOGGLE AIRPLANE** | Toggle Mode Pesawat ON (2 detik) → OFF untuk mendapatkan IP baru data seluler |
+| **EXTRACT PHRASE** | Dump UI uiautomator dan ambil 12 kata Seed Phrase Bitget Wallet |
+| **DETECT ADDRESS** | Ambil alamat barcode deposit/penerimaan `0x...` dari layar Bitget |
+
+---
+
+## ⚡ Metode Trigger Cepat:
+
+1. **Tombol Fisik HP**: Tekan **[VOLUME ATAS]** atau **[VOLUME BAWAH]** di HP (Countdown 3 detik).
+2. **Tombol Enter di Termux**: Tekan **[ENTER]** di terminal Termux (Countdown 4 detik).
+3. **Tombol Web POS Kasir**: Klik **[Ambil Phrase]** atau **[Reset Multi App]** di browser (Eksekusi instan 0 detik).
+4. **Bot Telegram**: Jalankan menu `/reset_adb` di Bot Telegram.
+
+---
+
+## 🔧 Manajemen Layanan PM2 di Termux
+
+```bash
+pm2 status          # Cek status bridge
+pm2 logs bridge     # Monitor log aktivitas realtime
+pm2 restart bridge  # Restart bridge
+pm2 stop bridge     # Hentikan bridge
+```
+
+---
+
+**Server Gateway Target:** `https://triomerak.web.id`  
+**Versi:** `v3.0 - Full ADB Shizuku Modular Engine`
+

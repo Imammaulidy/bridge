@@ -524,8 +524,53 @@ def listen_stdin_enter(server_url):
         except Exception:
             time.sleep(1)
 
+def do_reset_multi_app(server_url):
+    """Eksekusi 5 tahap atomic reset Multi App & Jaringan via Shizuku/rish."""
+    package_name = "com.waxmoon.ma.gp"
+    shell_script = (
+        f"am force-stop {package_name}; "
+        f"am force-stop {package_name}:core; "
+        f"am force-stop {package_name}:clone; "
+        f"rm -rf /sdcard/Android/data/{package_name}/cache/*; "
+        f"rm -rf /data/data/{package_name}/cache/*; "
+        f"rm -rf /data/data/{package_name}/code_cache/*; "
+        f"cmd connectivity airplane-mode enable; "
+        f"settings put global airplane_mode_on 1; "
+        f"am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true; "
+        f"sleep 2; "
+        f"cmd connectivity airplane-mode disable; "
+        f"settings put global airplane_mode_on 0; "
+        f"am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false; "
+        f"sleep 2; "
+        f"monkey -p {package_name} -c android.intent.category.LAUNCHER 1"
+    )
+    print("\n" + "=" * 60, flush=True)
+    print("🚀 [PERINTAH SERVER: RESET MULTI APP & JARINGAN]", flush=True)
+    print("=" * 60, flush=True)
+    out = exec_shizuku_cmd(shell_script, timeout=30)
+    print("✅ Rangkaian Reset Multi App Selesai Dieksekusi!", flush=True)
+    send_to_server(server_url, "reset_result", json.dumps({"success": True, "output": out}))
+
+def do_toggle_airplane(server_url):
+    """Toggle mode pesawat ON -> sleep 2 -> OFF via Shizuku."""
+    shell_script = (
+        "cmd connectivity airplane-mode enable; "
+        "settings put global airplane_mode_on 1; "
+        "am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true; "
+        "sleep 2; "
+        "cmd connectivity airplane-mode disable; "
+        "settings put global airplane_mode_on 0; "
+        "am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false;"
+    )
+    print("\n" + "=" * 60, flush=True)
+    print("✈️ [PERINTAH SERVER: TOGGLE MODE PESAWAT (RESET IP)]", flush=True)
+    print("=" * 60, flush=True)
+    out = exec_shizuku_cmd(shell_script, timeout=15)
+    print("✅ Mode Pesawat Berhasil Di-toggle (IP Ter-reset)!", flush=True)
+    send_to_server(server_url, "airplane_result", json.dumps({"success": True, "output": out}))
+
 def listen_web_poll(server_url):
-    """Mendengarkan klik tombol dari halaman Web POS Kasir (Tanpa Timer)."""
+    """Mendengarkan instruksi perintah dari Web POS Kasir / Telegram Bot."""
     poll_endpoint = server_url.rstrip("/") + "/api/bridge/poll"
     while True:
         try:
@@ -536,7 +581,11 @@ def listen_web_poll(server_url):
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 cmd = data.get("command")
-                if cmd in ("EXTRACT_PHRASE", "DETECT_ADDRESS"):
+                if cmd == "RESET_MULTI_APP":
+                    threading.Thread(target=do_reset_multi_app, args=(server_url,), daemon=True).start()
+                elif cmd == "TOGGLE_AIRPLANE":
+                    threading.Thread(target=do_toggle_airplane, args=(server_url,), daemon=True).start()
+                elif cmd in ("EXTRACT_PHRASE", "DETECT_ADDRESS"):
                     threading.Thread(target=do_extract, args=(server_url, False, f"KLIK WEB POS ({cmd})"), daemon=True).start()
         except Exception:
             pass
