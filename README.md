@@ -39,8 +39,9 @@ pm2 delete bridge 2>/dev/null; cd ~ && rm -rf bridge && git clone https://github
    - Buka menu **Authorized applications** (Aplikasi yang diizinkan) → Centang **Termux**.
 3. **Setup rish di Termux**:
    ```bash
-   cp /sdcard/Android/data/moe.shizuku.privileged.api/files/rish* $PREFIX/bin/ && chmod +x $PREFIX/bin/rish
-   rish -c id  # Verifikasi (wajib muncul uid=2000(shell))
+   bash run.sh
+   # Atau eksekusi tes koneksi:
+   rish -c "id"
    ```
 
 ---
@@ -74,25 +75,16 @@ pm2 restart bridge  # Restart bridge
 pm2 stop bridge     # Hentikan bridge
 ```
 
-## 📌 Troubleshooting: Mengatasi Error `couldn't find librish.so`
+## 📌 Troubleshooting: Mengatasi Error `rish` di Termux
 
-Jika saat tes `rish -c id` di Termux muncul error `java.lang.UnsatisfiedLinkError: couldn't find "librish.so"`, hal itu disebabkan karena file C++ JNI `librish.so` belum disalin ke direktori library Termux (`$PREFIX/lib/`).
+Jika `rish -c "id"` tidak terhubung atau mengalami kendala:
 
-**Solusi 1 (Jalankan Ulang Skrip Otomatis)**:
-Skrip `run.sh` terbaru sudah secara otomatis meng-unzip `librish.so` dari APK Shizuku. Cukup jalankan:
-```bash
-pm2 delete bridge 2>/dev/null; cd ~ && rm -rf bridge && git clone https://github.com/Imammaulidy/bridge.git && cd bridge && bash run.sh
-```
-
-**Solusi 2 (Ekspor Manual dari App Shizuku)**:
-1. Buka aplikasi **Shizuku** → klik **Export rish** → simpan di folder **Download**.
-2. Di Termux jalankan:
-   ```bash
-   cp /sdcard/Download/rish* $PREFIX/bin/ 2>/dev/null
-   cp /sdcard/Download/librish.so $PREFIX/lib/ 2>/dev/null
-   cp /sdcard/Download/librish.so $PREFIX/bin/ 2>/dev/null
-   chmod +x $PREFIX/bin/rish
-   ```
+1. **Pastikan Shizuku Aktif di HP**: Buka aplikasi Shizuku → Status wajib **Shizuku is running**.
+2. **Izinkan Termux di Shizuku**: Buka aplikasi Shizuku → **Authorized Applications** → Centang **Termux** (Pilih *Always Allow* saat dialog pop-up muncul di layar).
+3. **Android 14+ (Writable DEX Error)**:
+   Skrip `run.sh` secara otomatis menjalankan `chmod 400 $PREFIX/bin/rish_shizuku.dex` (Read-Only) agar mematuhi aturan keamanan Android 14+.
+4. **Export File Manual (Opsi Cadangan)**:
+   Jika ekstraksi APK terkendala pada ROM HP tertentu, buka aplikasi Shizuku → **Use Shizuku in terminal apps** → **Export files** ke folder Download. Skrip `run.sh` akan otomatis mendeteksi dan menyalin file `rish` & `rish_shizuku.dex` dari folder Download ke Termux!
 
 ---
 

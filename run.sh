@@ -90,35 +90,66 @@ all_in_one_setup() {
     echo "[5/8] Memasang binary rish dari Shizuku..."
     mkdir -p "$PREFIX/bin" "$PREFIX/tmp"
     
-    # 1. Ekstrak langsung dari APK Shizuku yang terpasang di HP
-    APK_PATH=$(pm path moe.shizuku.privileged.api 2>/dev/null | head -n 1 | cut -d: -f2 | tr -d '\r')
-    if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
-        echo "     [*] Mengekstrak rish langsung dari Shizuku APK..."
-        unzip -o -q "$APK_PATH" "assets/rish" "assets/rish_shizuku.dex" -d "$PREFIX/tmp" 2>/dev/null
-        if [ -f "$PREFIX/tmp/assets/rish" ]; then
-            mv "$PREFIX/tmp/assets/rish" "$PREFIX/bin/rish" 2>/dev/null
-            mv "$PREFIX/tmp/assets/rish_shizuku.dex" "$PREFIX/bin/rish_shizuku.dex" 2>/dev/null
-            rm -rf "$PREFIX/tmp/assets"
-            echo "     ✅ Berhasil mengekstrak rish dari APK Shizuku!"
+    # Hapus file rish / rish_shizuku.dex yang rusak (misal bekas unduhan 404 HTML usang)
+    if [ -f "$PREFIX/bin/rish" ] && grep -q "404" "$PREFIX/bin/rish" 2>/dev/null; then
+        rm -f "$PREFIX/bin/rish"
+    fi
+    if [ -f "$PREFIX/bin/rish_shizuku.dex" ] && grep -q "404" "$PREFIX/bin/rish_shizuku.dex" 2>/dev/null; then
+        rm -f "$PREFIX/bin/rish_shizuku.dex"
+    fi
+
+    RISH_FOUND=0
+
+    # 1. Coba salin langsung dari folder Download HP (jika di-export via Shizuku App: Use Shizuku in terminal apps -> Export files)
+    for DL_DIR in "/sdcard/Download" "$HOME/storage/downloads" "/storage/emulated/0/Download"; do
+        if [ -f "$DL_DIR/rish" ] && [ -f "$DL_DIR/rish_shizuku.dex" ]; then
+            echo "     [*] Menemukan file rish di $DL_DIR, menyalin ke $PREFIX/bin..."
+            cp "$DL_DIR/rish" "$PREFIX/bin/rish"
+            cp "$DL_DIR/rish_shizuku.dex" "$PREFIX/bin/rish_shizuku.dex"
+            RISH_FOUND=1
+            echo "     ✅ Berhasil menyalin rish dari folder Download HP!"
+            break
+        fi
+    done
+
+    # 2. Ekstrak langsung dari APK Shizuku yang terpasang di HP (moe.shizuku.privileged.api)
+    if [ $RISH_FOUND -eq 0 ]; then
+        APK_PATH=$(pm path moe.shizuku.privileged.api 2>/dev/null | head -n 1 | cut -d: -f2 | tr -d '\r')
+        if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
+            echo "     [*] Mengekstrak rish langsung dari Shizuku APK..."
+            unzip -o -q "$APK_PATH" "assets/rish" "assets/rish_shizuku.dex" -d "$PREFIX/tmp" 2>/dev/null
+            if [ -f "$PREFIX/tmp/assets/rish" ] && [ -f "$PREFIX/tmp/assets/rish_shizuku.dex" ]; then
+                mv "$PREFIX/tmp/assets/rish" "$PREFIX/bin/rish" 2>/dev/null
+                mv "$PREFIX/tmp/assets/rish_shizuku.dex" "$PREFIX/bin/rish_shizuku.dex" 2>/dev/null
+                rm -rf "$PREFIX/tmp/assets"
+                RISH_FOUND=1
+                echo "     ✅ Berhasil mengekstrak rish dari APK Shizuku!"
+            fi
         fi
     fi
 
-    # 2. Jika belum ada, unduh rish & rish_shizuku.dex dari repositori resmi RikkaApps/Shizuku-API
-    if [ ! -f "$PREFIX/bin/rish" ] || [ ! -f "$PREFIX/bin/rish_shizuku.dex" ]; then
-        echo "     [*] Mengunduh rish dari repositori resmi RikkaApps/Shizuku-API..."
-        curl -sL "https://raw.githubusercontent.com/RikkaApps/Shizuku-API/master/rish/rish" -o "$PREFIX/bin/rish" 2>/dev/null
-        curl -sL "https://raw.githubusercontent.com/RikkaApps/Shizuku-API/master/rish/rish_shizuku.dex" -o "$PREFIX/bin/rish_shizuku.dex" 2>/dev/null
-        echo "     ✅ Berhasil mengunduh rish dari GitHub Shizuku-API!"
+    # 3. Jika rish script belum ada, unduh rish script dari repositori resmi RikkaApps/Shizuku
+    if [ ! -f "$PREFIX/bin/rish" ]; then
+        echo "     [*] Mengunduh rish script dari repositori resmi RikkaApps/Shizuku..."
+        curl -sfL "https://raw.githubusercontent.com/RikkaApps/Shizuku/master/manager/src/main/assets/rish" -o "$PREFIX/bin/rish" 2>/dev/null
     fi
 
-    # 3. Patch Package ID ke com.termux
-    sed -i 's/"PKG"/"com.termux"/g' "$PREFIX/bin/rish" 2>/dev/null
-    sed -i 's/export RISH_APPLICATION_ID="PKG"/export RISH_APPLICATION_ID="com.termux"/g' "$PREFIX/bin/rish" 2>/dev/null
-    sed -i 's/PKG/com.termux/g' "$PREFIX/bin/rish" 2>/dev/null
+    # 4. Patch Package ID ke com.termux dan set izin eksekusi
+    if [ -f "$PREFIX/bin/rish" ]; then
+        sed -i 's/"PKG"/"com.termux"/g' "$PREFIX/bin/rish" 2>/dev/null
+        sed -i 's/export RISH_APPLICATION_ID="PKG"/export RISH_APPLICATION_ID="com.termux"/g' "$PREFIX/bin/rish" 2>/dev/null
+        sed -i 's/PKG/com.termux/g' "$PREFIX/bin/rish" 2>/dev/null
+        chmod 755 "$PREFIX/bin/rish" 2>/dev/null
+    fi
 
-    # 4. Set Permission Executable untuk binary dan READ-ONLY untuk DEX (Wajib Android 14+)
-    chmod 755 "$PREFIX/bin/rish" 2>/dev/null
-    chmod 400 "$PREFIX/bin/rish_shizuku.dex" 2>/dev/null || chmod 444 "$PREFIX/bin/rish_shizuku.dex" 2>/dev/null
+    # 5. Set Permission READ-ONLY untuk DEX (Wajib Android 14+)
+    if [ -f "$PREFIX/bin/rish_shizuku.dex" ]; then
+        chmod 400 "$PREFIX/bin/rish_shizuku.dex" 2>/dev/null || chmod 444 "$PREFIX/bin/rish_shizuku.dex" 2>/dev/null
+        echo "     ✅ Hak akses rish_shizuku.dex diatur ke Read-Only (Android 14+ Compliant)"
+    else
+        echo "     ⚠️ File rish_shizuku.dex belum ada di $PREFIX/bin/"
+        echo "        Petunjuk: Buka aplikasi Shizuku > 'Use Shizuku in terminal apps' > Export files ke Download."
+    fi
     
     # 6. Setup environment
     echo "[6/8] Setup environment variable..."
