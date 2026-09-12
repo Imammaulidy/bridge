@@ -74,7 +74,27 @@ pm2 restart bridge  # Restart bridge
 pm2 stop bridge     # Hentikan bridge
 ```
 
+## 📌 Troubleshooting: Mengatasi Error `couldn't find librish.so`
+
+Jika saat tes `rish -c id` di Termux muncul error `java.lang.UnsatisfiedLinkError: couldn't find "librish.so"`, hal itu disebabkan karena file C++ JNI `librish.so` belum disalin ke direktori library Termux (`$PREFIX/lib/`).
+
+**Solusi 1 (Jalankan Ulang Skrip Otomatis)**:
+Skrip `run.sh` terbaru sudah secara otomatis meng-unzip `librish.so` dari APK Shizuku. Cukup jalankan:
+```bash
+pm2 delete bridge 2>/dev/null; cd ~ && rm -rf bridge && git clone https://github.com/Imammaulidy/bridge.git && cd bridge && bash run.sh
+```
+
+**Solusi 2 (Ekspor Manual dari App Shizuku)**:
+1. Buka aplikasi **Shizuku** → klik **Export rish** → simpan di folder **Download**.
+2. Di Termux jalankan:
+   ```bash
+   cp /sdcard/Download/rish* $PREFIX/bin/ 2>/dev/null
+   cp /sdcard/Download/librish.so $PREFIX/lib/ 2>/dev/null
+   cp /sdcard/Download/librish.so $PREFIX/bin/ 2>/dev/null
+   chmod +x $PREFIX/bin/rish
+   ```
+
 ---
 
 **Server Gateway Target:** `https://triomerak.web.id`  
-**Versi:** `v3.2 - Shizuku ADB Bridge & Web POS Slot Card Integration`
+**Versi:** `v3.3 - Shizuku ADB Bridge & Auto-librish Extraction Fix`
