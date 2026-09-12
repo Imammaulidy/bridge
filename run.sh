@@ -86,37 +86,38 @@ all_in_one_setup() {
         echo "[4/8] ✅ Storage sudah dikonfigurasi"
     fi
     
-    # 5. Salin atau ekstrak binary rish dari Shizuku
-    echo "[5/8] Memasang binary rish dari Shizuku..."
+    # 5. Salin atau ekstrak binary rish & librish.so dari Shizuku
+    echo "[5/8] Memasang binary rish & librish.so dari Shizuku..."
     RISH_FOUND=0
     for dir in "/sdcard/Android/data/moe.shizuku.privileged.api/files" "/sdcard/Download" "$HOME/storage/shared/Android/data/moe.shizuku.privileged.api/files" "$HOME/storage/downloads" "/storage/emulated/0/Download"; do
         if [ -f "$dir/rish" ]; then
             cp "$dir/rish"* "$PREFIX/bin/" 2>/dev/null || cp "$dir/rish" "$PREFIX/bin/rish" 2>/dev/null
             [ -f "$dir/rish_shizuku.dex" ] && cp "$dir/rish_shizuku.dex" "$PREFIX/bin/" 2>/dev/null
+            [ -f "$dir/librish.so" ] && (cp "$dir/librish.so" "$PREFIX/lib/" 2>/dev/null; cp "$dir/librish.so" "$PREFIX/bin/" 2>/dev/null)
             RISH_FOUND=1
-            echo "     ✅ Binary rish disalin dari $dir"
+            echo "     ✅ Binary rish & library disalin dari $dir"
             break
         fi
     done
     
-    # Ekstrak langsung dari APK Shizuku jika belum ada di storage
-    if [ $RISH_FOUND -eq 0 ] && [ ! -f "$PREFIX/bin/rish_shizuku.dex" ]; then
-        APK_PATH=$(pm path moe.shizuku.privileged.api 2>/dev/null | head -n 1 | cut -d: -f2)
-        if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
-            echo "     [*] Mengekstrak rish langsung dari APK Shizuku..."
-            mkdir -p "$PREFIX/tmp/shizuku_extract"
-            unzip -o -q "$APK_PATH" "assets/rish" "assets/rish_shizuku.dex" -d "$PREFIX/tmp/shizuku_extract" 2>/dev/null
-            if [ -f "$PREFIX/tmp/shizuku_extract/assets/rish" ]; then
-                cp "$PREFIX/tmp/shizuku_extract/assets/rish" "$PREFIX/bin/rish"
-                cp "$PREFIX/tmp/shizuku_extract/assets/rish_shizuku.dex" "$PREFIX/bin/rish_shizuku.dex"
-                rm -rf "$PREFIX/tmp/shizuku_extract"
-                RISH_FOUND=1
-                echo "     ✅ Berhasil mengekstrak rish dari APK Shizuku!"
-            fi
+    # Ekstrak langsung dari APK Shizuku jika belum lengkap di bin
+    APK_PATH=$(pm path moe.shizuku.privileged.api 2>/dev/null | head -n 1 | cut -d: -f2)
+    if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
+        echo "     [*] Mengekstrak rish & librish.so dari APK Shizuku..."
+        mkdir -p "$PREFIX/tmp/shizuku_extract"
+        unzip -o -q "$APK_PATH" "assets/rish" "assets/rish_shizuku.dex" "lib/*/librish.so" -d "$PREFIX/tmp/shizuku_extract" 2>/dev/null
+        if [ -f "$PREFIX/tmp/shizuku_extract/assets/rish" ]; then
+            cp "$PREFIX/tmp/shizuku_extract/assets/rish" "$PREFIX/bin/rish" 2>/dev/null
+            [ -f "$PREFIX/tmp/shizuku_extract/assets/rish_shizuku.dex" ] && cp "$PREFIX/tmp/shizuku_extract/assets/rish_shizuku.dex" "$PREFIX/bin/rish_shizuku.dex" 2>/dev/null
+            find "$PREFIX/tmp/shizuku_extract" -name "librish.so" -exec cp {} "$PREFIX/lib/" \; 2>/dev/null
+            find "$PREFIX/tmp/shizuku_extract" -name "librish.so" -exec cp {} "$PREFIX/bin/" \; 2>/dev/null
+            rm -rf "$PREFIX/tmp/shizuku_extract"
+            RISH_FOUND=1
+            echo "     ✅ Berhasil mengekstrak rish & librish.so dari APK Shizuku!"
         fi
     fi
 
-    # Patch PKG & Permission read-only untuk Android 14+ / HyperOS
+    # Patch PKG, LD_LIBRARY_PATH & Permission read-only untuk Android 14+ / HyperOS
     if [ -f "$PREFIX/bin/rish" ]; then
         sed -i 's/"PKG"/"com.termux"/g' "$PREFIX/bin/rish" 2>/dev/null
         sed -i 's/export RISH_APPLICATION_ID="PKG"/export RISH_APPLICATION_ID="com.termux"/g' "$PREFIX/bin/rish" 2>/dev/null
@@ -130,7 +131,9 @@ all_in_one_setup() {
     # 6. Setup environment
     echo "[6/8] Setup environment variable..."
     export RISH_APPLICATION_ID="com.termux"
+    export LD_LIBRARY_PATH="$PREFIX/lib:$PREFIX/bin:$LD_LIBRARY_PATH"
     grep -q "RISH_APPLICATION_ID" ~/.bashrc 2>/dev/null || echo 'export RISH_APPLICATION_ID="com.termux"' >> ~/.bashrc
+    grep -q "LD_LIBRARY_PATH.*PREFIX" ~/.bashrc 2>/dev/null || echo 'export LD_LIBRARY_PATH="$PREFIX/lib:$PREFIX/bin:$LD_LIBRARY_PATH"' >> ~/.bashrc
     
     # 7. Test Backend
     echo "[7/8] Testing backend eksekusi ADB..."
