@@ -1,20 +1,33 @@
 # 🌉 Trio Merak - Shizuku Bridge for Android (Termux 24/7)
 
-Jembatan otomatisasi Shizuku (Non-Root) di HP Android untuk:
-1. **Reset Multi App & Jaringan (ADB Atomic Engine)**: Force stop `com.waxmoon.ma.gp`, hapus cache, reset IP data seluler via Mode Pesawat, dan relaunch otomatis (seperti Bot Litensi).
-2. **Ekstraksi Seed Phrase & Barcode Address**: Membaca 12/24 kata dan address `0x...` dari layar Bitget Wallet.
-3. **Komunikasi Dua Arah**: Terhubung ke Server Gateway (`https://triomerak.web.id`) via internet seluler 4G/5G tanpa butuh kabel USB atau Wi-Fi satu jaringan.
+Jembatan otomatisasi Shizuku (Non-Root) di HP Android untuk menghubungkan perangkat seluler ke Server Gateway (`https://triomerak.web.id`).
 
 ---
 
-## ⚡ Mode Ekspres (1 Baris Perintah Langsung Jadi):
+## 🚀 Fungsi & Fitur Utama
+
+1. **⚡ Ekstraksi Seed Phrase & Barcode Address**:
+   - Membaca 12/24 kata Seed Phrase Bitget Wallet dari layar HP tanpa kabel USB & tanpa Wi-Fi lokal.
+   - Deteksi otomatis alamat deposit EVM (`0x...`) dari layar HP penerima.
+2. **🔄 Reset Multi App & Jaringan (ADB Atomic Engine)**:
+   - Force stop `com.waxmoon.ma.gp`, bersihkan cache, toggle Mode Pesawat ON/OFF (reset IP seluler 4G/5G), dan relaunch otomatis.
+3. **🌐 Komunikasi Dua Arah**:
+   - Terhubung secara aman ke `https://triomerak.web.id` via polling & socket HTTP. Kebal terhadap pergantian IP dinamis / Mode Pesawat.
+4. **🎛️ Terintegrasi Langsung dengan POS Grid Card**:
+   - Dikuasai langsung dari Web POS Kasir (`triomerak.web.id/pos`) via tombol **Ambil Phrase dari HP (Shizuku)** dan **Ambil Address dari Layar HP Penerima** pada **Wallet Auto & Sweeper Slot Card**.
+
+---
+
+## ⚡ Mode Ekspres (1 Baris Perintah Install / Reset Termux):
+
+Jalankan perintah berikut di aplikasi **Termux**:
 
 ```bash
 pm2 delete bridge 2>/dev/null; cd ~ && rm -rf bridge && git clone https://github.com/Imammaulidy/bridge.git && cd bridge && bash run.sh
 ```
 
 > [!TIP]
-> Perintah di atas akan otomatis mengunduh dependency, menyalin binary Shizuku `rish`, mengaktifkan wake-lock, dan menjalankan bridge 24/7 di latar belakang via PM2.
+> Perintah di atas akan otomatis mengunduh dependensi, menyalin binary Shizuku `rish`, mengaktifkan wake-lock, dan menjalankan bridge 24/7 di latar belakang via PM2.
 
 ---
 
@@ -32,7 +45,7 @@ pm2 delete bridge 2>/dev/null; cd ~ && rm -rf bridge && git clone https://github
 
 ---
 
-## 🎯 Fitur & Kemampuan ADB (Sama Persis Seperti Bot Litensi)
+## 🎯 Fitur & Kemampuan ADB
 
 | Perintah | Deskripsi Aksi di HP |
 |---|---|
@@ -45,9 +58,9 @@ pm2 delete bridge 2>/dev/null; cd ~ && rm -rf bridge && git clone https://github
 
 ## ⚡ Metode Trigger Cepat:
 
-1. **Tombol Fisik HP**: Tekan **[VOLUME ATAS]** atau **[VOLUME BAWAH]** di HP (Countdown 3 detik).
-2. **Tombol Enter di Termux**: Tekan **[ENTER]** di terminal Termux (Countdown 4 detik).
-3. **Tombol Web POS Kasir**: Klik **[Ambil Phrase]** atau **[Reset Multi App]** di browser (Eksekusi instan 0 detik).
+1. **Tombol Web POS Kasir**: Klik **[Ambil Phrase dari HP]** atau **[Ambil Address]** di slot card Web POS (`triomerak.web.id/pos`).
+2. **Tombol Fisik HP**: Tekan **[VOLUME ATAS]** atau **[VOLUME BAWAH]** di HP (Countdown 3 detik).
+3. **Tombol Enter di Termux**: Tekan **[ENTER]** di terminal Termux (Countdown 4 detik).
 4. **Bot Telegram**: Jalankan menu `/reset_adb` di Bot Telegram.
 
 ---
@@ -64,5 +77,4 @@ pm2 stop bridge     # Hentikan bridge
 ---
 
 **Server Gateway Target:** `https://triomerak.web.id`  
-**Versi:** `v3.0 - Full ADB Shizuku Modular Engine`
-
+**Versi:** `v3.2 - Shizuku ADB Bridge & Web POS Slot Card Integration`
